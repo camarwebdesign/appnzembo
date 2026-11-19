@@ -1,0 +1,41 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": null,
+  "outputDirectory": "public",
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "/env.local.js",
+      "destination": "/api/index.js"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.js"
+    },
+    {
+      "source": "/public/(.*)",
+      "destination": "/$1"
+    },
+    {
+      "source": "/app",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/app/((?!.*\\..*).*)",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/invite/(.*)",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/((?!api/|env\\.local\\.js|.*\\..*).*)",
+      "destination": "/app.html"
+    }
+  ]
+}
