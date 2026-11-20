@@ -9,26 +9,31 @@ dotenv.config({ path: path.join(__dirname, 'server', '.env') });
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const PORT = process.env.PORT || 3000;
 const app = express();
+const envHandler = require('./api/env');
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  return next();
+});
 
 function sendAppView(_req, res) {
   return res.sendFile(path.join(PUBLIC_DIR, 'app.html'));
 }
 
-// Endpoint client env.local.js (sert le fichier local en dev, ou expose la config publique depuis process.env en production)
-app.get('/env.local.js', (_req, res) => {
+// Endpoint client env.local.js (sert le fichier local en dev, ou expose la config publique depuis process.env / repli sûr en production)
+app.get(['/env.local.js', '/api/env'], (req, res) => {
   const localEnvFile = path.join(PUBLIC_DIR, 'env.local.js');
-  if (fs.existsSync(localEnvFile)) {
+  if (req.path === '/env.local.js' && fs.existsSync(localEnvFile)) {
     return res.sendFile(localEnvFile);
   }
-  const clientEnv = {
-    BACKEND_URL: process.env.BACKEND_URL || '',
-    SUPABASE_URL: process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-    SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
-    ENGINE_BEARER_TOKEN: process.env.ENGINE_BEARER_TOKEN || process.env.NEXT_PUBLIC_ENGINE_BEARER_TOKEN || ''
-  };
-  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store');
-  return res.send(`window.__NZEMBO_ENV__ = ${JSON.stringify(clientEnv)};`);
+  return envHandler(req, res);
 });
 
 // Montage des routes API Backend existantes (SasPay, Neon DB, Suno, Auth) sans altérer req.rawBody

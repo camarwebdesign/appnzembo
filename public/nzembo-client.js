@@ -37,15 +37,82 @@
     return {};
   }
 
+  const DEFAULT_PUBLIC_SUPABASE_URL = "https://xmkdtbwurwtigkdjehhz.supabase.co";
+  const DEFAULT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhta2R0Ynd1cnd0aWdrZGplaGh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzMzU2NTEsImV4cCI6MjEwOTkxMTY1MX0.Yt9RqMgyHgQIbqK7SHZRgaAgltjQELZtylqGc1kM--Y";
+
   const _nzemboEnv = resolveNzemboEnv();
-  const SUPABASE_URL = _nzemboEnv.SUPABASE_URL || _nzemboEnv.NEXT_PUBLIC_SUPABASE_URL || "";
-  const SUPABASE_ANON_KEY = _nzemboEnv.SUPABASE_ANON_KEY || _nzemboEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+  let SUPABASE_URL = _nzemboEnv.SUPABASE_URL || _nzemboEnv.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_PUBLIC_SUPABASE_URL;
+  let SUPABASE_ANON_KEY = _nzemboEnv.SUPABASE_ANON_KEY || _nzemboEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY || DEFAULT_PUBLIC_SUPABASE_ANON_KEY;
   const STORAGE_BUCKET = "nzembo-media";
 
   const ENGINE_BEARER_TOKEN = _nzemboEnv.ENGINE_BEARER_TOKEN || _nzemboEnv.SUNO_BEARER_TOKEN || _nzemboEnv.SUNO_API_KEY || "";
   const DIRECT_ENGINE_BASE = "https://api.sunoapi.org/api/v1";
   const FILE_UPLOAD_BASE = "https://sunoapiorg.redpandaai.co/api";
   const WEBHOOK_NOOP_URL = "https://nzembo.net/api/webhook-noop";
+
+  // Formatage explicite et clair des erreurs d'authentification (Supabase, réseau, CORS, OAuth, serveur)
+  function formatAuthError(errOrMsg, fallback = "Erreur serveur lors de l'authentification.") {
+    const rawMsg = (errOrMsg && typeof errOrMsg === 'object') ? (errOrMsg.message || errOrMsg.error_description || errOrMsg.msg || '') : String(errOrMsg || '');
+    const statusCode = (errOrMsg && typeof errOrMsg === 'object' && errOrMsg.status) ? Number(errOrMsg.status) : 0;
+    const str = String(rawMsg || '').trim();
+
+    if (/Invalid login credentials/i.test(str)) {
+      return "E-mail ou mot de passe incorrect.";
+    }
+    if (/Email not confirmed/i.test(str)) {
+      return "E-mail non confirmé : clique d'abord sur le lien reçu dans ta boîte mail.";
+    }
+    if (/User already registered|already been registered|email_exists/i.test(str)) {
+      return "Un compte existe déjà avec cette adresse e-mail. Connecte-toi.";
+    }
+    if (/Password should be at least|weak_password/i.test(str)) {
+      return "Le mot de passe doit comporter au moins 6 caractères.";
+    }
+    if (/Unable to validate email address|invalid.*email|validation_failed/i.test(str)) {
+      return "Adresse e-mail invalide. Vérifie le format saisi.";
+    }
+    if (/Signups not allowed|signup_disabled/i.test(str)) {
+      return "La création de compte est temporairement désactivée sur le serveur d'authentification.";
+    }
+    if (/security purposes|rate limit|too many requests|over_email_send_rate_limit/i.test(str)) {
+      return "Trop de tentatives ou limite d'envoi d'e-mails atteinte. Réessaie dans quelques minutes.";
+    }
+    if (/Token has expired|invalid token|otp_expired/i.test(str)) {
+      return "Ce lien a expiré ou est invalide. Fais une nouvelle demande.";
+    }
+    if (/Unsupported provider|provider is not enabled/i.test(str)) {
+      return "La connexion Google (OAuth) n'est pas encore activée dans Supabase Auth.";
+    }
+    if (/redirect_uri_mismatch|redirect_to|not allowed/i.test(str)) {
+      const origin = (typeof window !== 'undefined' && window.location) ? window.location.origin : 'https://app.nzembo.net';
+      return `URL de redirection non autorisée par le serveur (${origin}).`;
+    }
+    if (/Database error saving new user/i.test(str)) {
+      return "Erreur base de données lors de l'enregistrement du nouveau profil utilisateur.";
+    }
+    if (/Invalid API key|No API key found|apikey/i.test(str)) {
+      return "Clé d'authentification Supabase invalide ou manquante côté serveur.";
+    }
+    if (/failed to fetch|networkerror|network error|load failed|err_network|timeout/i.test(str)) {
+      return "Problème de connexion au serveur d'authentification (réseau indisponible ou CORS bloqué).";
+    }
+    if (/access_denied|user_cancelled|cancelled/i.test(str)) {
+      return "Connexion Google annulée par l'utilisateur.";
+    }
+    if (str) {
+      return statusCode ? `${str} (Code ${statusCode})` : str;
+    }
+    return fallback;
+  }
+
+  function buildAuthRedirectUrl(hashSuffix = '') {
+    if (typeof window !== 'undefined' && window.location && /^https?:/i.test(window.location.protocol)) {
+      const p = window.location.pathname || '/';
+      const basePath = p.startsWith('/app') ? '/app' : '';
+      return window.location.origin + basePath + hashSuffix;
+    }
+    return 'https://app.nzembo.net' + hashSuffix;
+  }
 
   // Masquage absolu de tout nom de fournisseur tiers dans les messages visibles ou erreurs
   function sanitizeApiErrorMessage(rawMsg, fallback = "Une erreur est survenue lors du traitement, réessaie.") {
@@ -76,15 +143,23 @@
 
   // Instance Supabase partagée
   let _supabaseInstance = null;
+  let _supabaseInitError = '';
 
   function getSupabase() {
     if (_supabaseInstance) return _supabaseInstance;
     if (typeof window !== 'undefined' && window.supabaseClient) {
       _supabaseInstance = window.supabaseClient;
+      _supabaseInitError = '';
       return _supabaseInstance;
     }
+
+    const latestEnv = resolveNzemboEnv();
+    SUPABASE_URL = latestEnv.SUPABASE_URL || latestEnv.NEXT_PUBLIC_SUPABASE_URL || SUPABASE_URL || DEFAULT_PUBLIC_SUPABASE_URL;
+    SUPABASE_ANON_KEY = latestEnv.SUPABASE_ANON_KEY || latestEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY || DEFAULT_PUBLIC_SUPABASE_ANON_KEY;
+
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      console.warn('[Supabase] Configuration manquante : définissez SUPABASE_URL et SUPABASE_ANON_KEY dans env.local.js ou .env.');
+      _supabaseInitError = 'Configuration serveur manquante : URL ou clé Supabase introuvable.';
+      console.warn('[Supabase] Configuration manquante : définissez SUPABASE_URL et SUPABASE_ANON_KEY dans env.local.js ou sur Vercel.');
       return null;
     }
     if (typeof window !== 'undefined') {
@@ -98,10 +173,16 @@
             }
           });
           window.supabaseClient = _supabaseInstance;
+          _supabaseInitError = '';
           return _supabaseInstance;
         } catch (e) {
+          _supabaseInitError = 'Initialisation du client Supabase échouée : ' + (e && e.message ? e.message : 'erreur inconnue');
           console.warn('[Supabase] Initialisation browser:', e.message);
+          return null;
         }
+      } else {
+        _supabaseInitError = 'Le module d\'authentification Supabase n\'a pas pu se charger (vérifie ta connexion internet ou réactualise).';
+        return null;
       }
     }
     // Environnement Node / Tests
@@ -109,10 +190,21 @@
       try {
         const { createClient } = require('@supabase/supabase-js');
         _supabaseInstance = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        _supabaseInitError = '';
         return _supabaseInstance;
-      } catch (e) {}
+      } catch (e) {
+        _supabaseInitError = 'Client Supabase Node indisponible : ' + (e && e.message ? e.message : 'erreur');
+      }
     }
     return null;
+  }
+
+  function getSupabaseOrThrow() {
+    const sb = getSupabase();
+    if (!sb) {
+      throw new Error(_supabaseInitError || 'Service d\'authentification indisponible : vérifie la configuration Supabase et la connexion internet.');
+    }
+    return sb;
   }
 
   // Détection dynamique du proxy local (Support Mobile, Émulateur Android et Local PC)
@@ -534,11 +626,13 @@
             user.credits = savePersistedCredits(user.credits, user.id);
           }
           localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+          localStorage.setItem('nzembo_user_logged_in', '1');
           if (user.credits !== undefined && typeof window !== 'undefined' && window.NzemboStore && typeof window.NzemboStore.setUserCredits === 'function') {
             window.NzemboStore.setUserCredits(user.credits);
           }
         } else {
           localStorage.removeItem(SESSION_KEY);
+          localStorage.removeItem('nzembo_user_logged_in');
           localStorage.removeItem('nzembo_demo_session');
           localStorage.removeItem('nzembo_user_credits');
           localStorage.removeItem('nzembo_credits_updated_at');
@@ -897,20 +991,25 @@
 
     // 1. Authentification Native Supabase (Email / Password & Google OAuth)
     signInWithGoogle: async function() {
-      const sb = getSupabase();
-      if (!sb) throw new Error('Connexion impossible, réessaie.');
-      const redirectUrl = (typeof window !== 'undefined' && window.location) 
-        ? (window.location.origin + window.location.pathname) 
-        : 'https://app.nzembo.net';
+      const sb = getSupabaseOrThrow();
+      const redirectUrl = buildAuthRedirectUrl();
 
-      const { data, error } = await sb.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectUrl
-        }
-      });
+      let data, error;
+      try {
+        ({ data, error } = await sb.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: redirectUrl
+          }
+        }));
+      } catch (netErr) {
+        throw new Error(formatAuthError(netErr, 'Erreur réseau lors de la redirection vers Google.'));
+      }
       if (error) {
-        throw new Error(sanitizeApiErrorMessage(error.message, 'Connexion avec Google impossible, réessaie.'));
+        throw new Error(formatAuthError(error, 'Impossible de démarrer la connexion avec Google.'));
+      }
+      if (!data || !data.url) {
+        throw new Error("Le serveur d'authentification n'a renvoyé aucune URL de redirection Google.");
       }
       return data;
     },
@@ -918,41 +1017,56 @@
     login: async function(email, password) {
       email = (email || '').trim().toLowerCase();
       password = (password || '').trim();
-      if (!email) throw new Error('Veuillez renseigner votre email.');
+      if (!email) throw new Error('Veuillez renseigner votre e-mail.');
       if (!password) throw new Error('Veuillez renseigner votre mot de passe.');
 
-      const sb = getSupabase();
-      if (!sb) throw new Error('Connexion impossible, réessaie.');
+      const sb = getSupabaseOrThrow();
 
-      const { data, error } = await sb.auth.signInWithPassword({
-        email: email,
-        password: password
-      });
+      let data, error;
+      try {
+        ({ data, error } = await sb.auth.signInWithPassword({
+          email: email,
+          password: password
+        }));
+      } catch (netErr) {
+        throw new Error(formatAuthError(netErr, 'Impossible de joindre le serveur de connexion.'));
+      }
 
       if (error) {
         if (/Email not confirmed/i.test(error.message)) {
-          const unconfErr = new Error("Confirme d'abord ton compte avec le lien reçu par email.");
+          const unconfErr = new Error("E-mail non confirmé : clique d'abord sur le lien reçu dans ta boîte mail.");
           unconfErr.isUnconfirmedEmail = true;
           unconfErr.email = email;
           throw unconfErr;
         }
-        if (/Invalid login credentials/i.test(error.message)) {
-          throw new Error('Email ou mot de passe incorrect.');
-        }
-        throw new Error(sanitizeApiErrorMessage(error.message, 'Email ou mot de passe incorrect.'));
+        throw new Error(formatAuthError(error, 'E-mail ou mot de passe incorrect.'));
       }
 
-      const authUser = data.user;
-      if (!authUser) throw new Error('Connexion impossible, réessaie.');
+      const authUser = data && data.user;
+      if (!authUser) throw new Error("Le serveur n'a renvoyé aucune session utilisateur.");
 
       let profile = null;
+      const fallbackName = authUser.user_metadata?.full_name || authUser.user_metadata?.name || email.split('@')[0];
+      const fallbackRef = authUser.user_metadata?.referral_code || ('NZ-' + authUser.id.substring(0, 5).toUpperCase());
       try {
-        const { data: pData } = await sb.from('profiles').select('*').eq('id', authUser.id).single();
+        const { data: pData } = await sb.from('profiles').select('*').eq('id', authUser.id).maybeSingle();
         profile = pData;
-      } catch (pe) {}
+        if (!profile) {
+          const { data: insData } = await sb.from('profiles').upsert([{
+            id: authUser.id,
+            email: authUser.email,
+            name: fallbackName,
+            credits: 3,
+            referral_code: fallbackRef
+          }], { onConflict: 'id' }).select().maybeSingle();
+          profile = insData;
+        }
+      } catch (pe) {
+        console.warn('[Supabase Profile] Lecture/création différée:', pe && pe.message);
+      }
 
       const persistedLoginCredits = getPersistedCredits(authUser.id, null);
-      const dbLoginCredits = (profile && profile.credits !== undefined && profile.credits !== null) ? Number(profile.credits) : 0;
+      const dbLoginCredits = (profile && profile.credits !== undefined && profile.credits !== null) ? Number(profile.credits) : 3;
       const resolvedLoginCredits = (persistedLoginCredits !== null && (dbLoginCredits === 3 || !profile))
         ? persistedLoginCredits
         : dbLoginCredits;
@@ -961,9 +1075,10 @@
       const user = {
         id: authUser.id,
         email: authUser.email,
-        name: (profile && profile.name) ? profile.name : (authUser.user_metadata?.full_name || authUser.user_metadata?.name || email.split('@')[0]),
+        name: (profile && profile.name) ? profile.name : fallbackName,
+        avatar_url: (profile && profile.avatar_url) || getSavedAvatarForUser(authUser.id) || authUser.user_metadata?.avatar_url || authUser.user_metadata?.picture || null,
         credits: resolvedLoginCredits,
-        referral_code: (profile && profile.referral_code) ? profile.referral_code : (authUser.user_metadata?.referral_code || 'NZ-' + authUser.id.substring(0, 5).toUpperCase())
+        referral_code: (profile && profile.referral_code) ? profile.referral_code : fallbackRef
       };
 
       setCurrentUser(user);
@@ -976,65 +1091,78 @@
       password = (password || '').trim();
 
       if (!name) throw new Error('Veuillez renseigner votre nom complet.');
-      if (!email || !email.includes('@')) throw new Error('Veuillez renseigner un email valide.');
+      if (!email || !email.includes('@')) throw new Error('Veuillez renseigner une adresse e-mail valide.');
       if (!password || password.length < 6) throw new Error('Le mot de passe doit comporter au moins 6 caractères.');
 
-      const sb = getSupabase();
-      if (!sb) throw new Error('Connexion impossible, réessaie.');
+      const sb = getSupabaseOrThrow();
 
       const generatedRefCode = 'NZ-' + Math.floor(10000 + Math.random() * 90000);
-      const redirectUrl = (typeof window !== 'undefined' && window.location)
-        ? (window.location.origin + window.location.pathname + '#confirmed')
-        : 'https://app.nzembo.net/#confirmed';
+      const redirectUrl = buildAuthRedirectUrl('/#confirmed');
 
-      const { data, error } = await sb.auth.signUp({
-        email: email,
-        password: password,
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: {
-            name: name,
-            full_name: name,
-            referral_code: generatedRefCode,
-            referral_code_used: referralCodeUsed || null
+      let data, error;
+      try {
+        ({ data, error } = await sb.auth.signUp({
+          email: email,
+          password: password,
+          options: {
+            emailRedirectTo: redirectUrl,
+            data: {
+              name: name,
+              full_name: name,
+              credits: 3,
+              referral_code: generatedRefCode,
+              referral_code_used: referralCodeUsed || null
+            }
           }
-        }
-      });
-
-      if (error) {
-        if (/User already registered/i.test(error.message)) {
-          throw new Error('Un compte existe déjà avec cette adresse email. Connecte-toi.');
-        }
-        throw new Error(sanitizeApiErrorMessage(error.message, 'Création de compte impossible pour le moment, réessaie.'));
+        }));
+      } catch (netErr) {
+        throw new Error(formatAuthError(netErr, 'Erreur réseau lors de la création du compte.'));
       }
 
-      const authUser = data.user;
-      if (!authUser) throw new Error('Échec de la création du compte.');
+      if (error) {
+        throw new Error(formatAuthError(error, 'Impossible de créer le compte sur le serveur.'));
+      }
+
+      const authUser = data && data.user;
+      if (!authUser) throw new Error("Échec de la création du compte : réponse serveur vide.");
+      if (Array.isArray(authUser.identities) && authUser.identities.length === 0) {
+        throw new Error('Un compte existe déjà avec cette adresse e-mail. Connecte-toi.');
+      }
 
       // Si confirmation d'email requise (pas de session active immédiate)
-      const needsConfirmation = !data.session || !authUser.confirmed_at;
+      const needsConfirmation = !data.session;
 
       let profile = null;
       try {
-        const { data: pData } = await sb.from('profiles').select('*').eq('id', authUser.id).single();
+        const { data: pData } = await sb.from('profiles').select('*').eq('id', authUser.id).maybeSingle();
         profile = pData;
         if (!profile) {
-          const { data: insData } = await sb.from('profiles').insert([{
+          const { data: insData, error: insErr } = await sb.from('profiles').upsert([{
             id: authUser.id,
             email: authUser.email,
             name: name,
             credits: 3,
             referral_code: generatedRefCode
-          }]).select().single();
-          profile = insData;
+          }], { onConflict: 'id' }).select().maybeSingle();
+          if (insErr) {
+            console.warn('[Supabase Profile SignUp] Enregistrement différé (RLS/Confirmation):', insErr.message);
+          } else {
+            profile = insData;
+          }
         }
-      } catch (pe) {}
+      } catch (pe) {
+        console.warn('[Supabase Profile SignUp] Exception:', pe && pe.message);
+      }
+
+      const initialCredits = (profile && profile.credits !== undefined && profile.credits !== null)
+        ? Number(profile.credits)
+        : 3;
 
       const user = {
         id: authUser.id,
         email: authUser.email,
-        name: name,
-        credits: (profile && profile.credits !== undefined && profile.credits !== null) ? Number(profile.credits) : 0,
+        name: (profile && profile.name) || name,
+        credits: initialCredits,
         referral_code: (profile && profile.referral_code) ? profile.referral_code : generatedRefCode,
         needsConfirmation: needsConfirmation
       };
@@ -1047,47 +1175,46 @@
 
     resendConfirmationEmail: async function(email) {
       email = (email || '').trim().toLowerCase();
-      if (!email || !email.includes('@')) throw new Error('Veuillez renseigner un email valide.');
-      const sb = getSupabase();
-      if (!sb) throw new Error('Connexion impossible, réessaie.');
+      if (!email || !email.includes('@')) throw new Error('Veuillez renseigner une adresse e-mail valide.');
+      const sb = getSupabaseOrThrow();
 
-      const redirectUrl = (typeof window !== 'undefined' && window.location)
-        ? (window.location.origin + window.location.pathname + '#confirmed')
-        : 'https://app.nzembo.net/#confirmed';
+      const redirectUrl = buildAuthRedirectUrl('/#confirmed');
 
-      const { error } = await sb.auth.resend({
-        type: 'signup',
-        email: email,
-        options: {
-          emailRedirectTo: redirectUrl
-        }
-      });
+      let error;
+      try {
+        ({ error } = await sb.auth.resend({
+          type: 'signup',
+          email: email,
+          options: {
+            emailRedirectTo: redirectUrl
+          }
+        }));
+      } catch (netErr) {
+        throw new Error(formatAuthError(netErr, "Problème réseau lors de l'envoi de l'e-mail de confirmation."));
+      }
       if (error) {
-        if (/security purposes|rate limit/i.test(error.message)) {
-          throw new Error('Trop de tentatives, réessaie dans quelques minutes.');
-        }
-        throw new Error("Impossible d'envoyer l'email pour le moment, réessaie.");
+        throw new Error(formatAuthError(error, "Impossible d'envoyer l'e-mail de confirmation pour le moment."));
       }
       return { success: true };
     },
 
     requestPasswordReset: async function(email) {
       email = (email || '').trim().toLowerCase();
-      if (!email || !email.includes('@')) throw new Error('Veuillez renseigner un email valide.');
-      const sb = getSupabase();
-      if (!sb) throw new Error('Connexion impossible, réessaie.');
+      if (!email || !email.includes('@')) throw new Error('Veuillez renseigner une adresse e-mail valide.');
+      const sb = getSupabaseOrThrow();
 
-      const redirectUrl = (typeof window !== 'undefined' && window.location)
-        ? (window.location.origin + window.location.pathname + '#reset-password')
-        : 'https://app.nzembo.net/#reset-password';
+      const redirectUrl = buildAuthRedirectUrl('/#reset-password');
 
-      const { error } = await sb.auth.resetPasswordForEmail(email, {
-        redirectTo: redirectUrl
-      });
+      let error;
+      try {
+        ({ error } = await sb.auth.resetPasswordForEmail(email, {
+          redirectTo: redirectUrl
+        }));
+      } catch (netErr) {
+        throw new Error(formatAuthError(netErr, "Erreur réseau lors de la demande de réinitialisation."));
+      }
       if (error) {
-        if (/security purposes|rate limit/i.test(error.message)) {
-          throw new Error('Trop de tentatives, réessaie dans quelques minutes.');
-        }
+        throw new Error(formatAuthError(error, "Impossible d'envoyer l'e-mail de réinitialisation."));
       }
       return { success: true };
     },
@@ -1097,17 +1224,21 @@
       if (!newPassword || newPassword.length < 6) {
         throw new Error('Le mot de passe doit comporter au moins 6 caractères.');
       }
-      const sb = getSupabase();
-      if (!sb) throw new Error('Connexion impossible, réessaie.');
+      const sb = getSupabaseOrThrow();
 
-      const { data, error } = await sb.auth.updateUser({
-        password: newPassword
-      });
+      let data, error;
+      try {
+        ({ data, error } = await sb.auth.updateUser({
+          password: newPassword
+        }));
+      } catch (netErr) {
+        throw new Error(formatAuthError(netErr, 'Erreur réseau lors de la mise à jour du mot de passe.'));
+      }
       if (error) {
         if (/same password/i.test(error.message)) {
           throw new Error('Choisis un mot de passe différent du précédent.');
         }
-        throw new Error(sanitizeApiErrorMessage(error.message, 'Impossible de mettre à jour le mot de passe, réessaie.'));
+        throw new Error(formatAuthError(error, 'Impossible de mettre à jour le mot de passe.'));
       }
       if (data && data.user) {
         await this.refreshUserData();
@@ -1122,24 +1253,44 @@
       try {
         const searchParams = new URLSearchParams(window.location.search);
         const hashStr = window.location.hash || '';
+        const hashParams = new URLSearchParams(hashStr.startsWith('#') ? hashStr.slice(1) : hashStr);
 
         // Erreur OAuth dans l'URL
-        if (searchParams.get('error') || hashStr.includes('error=')) {
+        const oauthError = searchParams.get('error') || hashParams.get('error');
+        const oauthErrorDesc = searchParams.get('error_description') || hashParams.get('error_description');
+        if (oauthError || oauthErrorDesc) {
           window.history.replaceState({}, document.title, window.location.pathname);
-          return { error: 'Connexion annulée ou non autorisée.' };
+          return { error: formatAuthError(oauthErrorDesc || oauthError, 'Connexion avec Google annulée ou refusée.') };
         }
 
         // Code PKCE
         const code = searchParams.get('code');
-        if (code && typeof sb.auth.exchangeCodeForSession === 'function') {
-          const { data, error } = await sb.auth.exchangeCodeForSession(code);
+        if (code) {
+          let exchangeUser = null;
+          let exchangeErr = null;
+          if (typeof sb.auth.exchangeCodeForSession === 'function') {
+            const { data, error } = await sb.auth.exchangeCodeForSession(code);
+            if (!error && data && data.user) exchangeUser = data.user;
+            else exchangeErr = error;
+          }
+          if (!exchangeUser) {
+            // Vérifier si detectSessionInUrl a déjà consommé le code automatiquement
+            const { data: sessFallback } = await sb.auth.getSession();
+            if (sessFallback && sessFallback.session && sessFallback.session.user) {
+              exchangeUser = sessFallback.session.user;
+              exchangeErr = null;
+            }
+          }
           window.history.replaceState({}, document.title, window.location.pathname);
-          if (!error && data && data.user) {
+          if (exchangeUser) {
             return await this.refreshUserData();
+          }
+          if (exchangeErr) {
+            return { error: formatAuthError(exchangeErr, 'Échec de validation de la session Google.') };
           }
         }
 
-        // Token Hash
+        // Token Hash (Implicit OAuth / Magic link)
         if (hashStr.includes('access_token=') || hashStr.includes('refresh_token=')) {
           const { data: sessData } = await sb.auth.getSession();
           if (sessData && sessData.session && sessData.session.user) {
@@ -1149,6 +1300,7 @@
         }
       } catch (e) {
         console.warn('Session exchange notice:', e);
+        return { error: formatAuthError(e, 'Erreur lors du retour de connexion.') };
       }
       return null;
     },
@@ -1186,21 +1338,21 @@
         const userId = current ? current.id : (authUser ? authUser.id : null);
         if (!userId) return null;
 
-        let { data: profile } = await sb.from('profiles').select('*').eq('id', userId).single();
+        let { data: profile } = await sb.from('profiles').select('*').eq('id', userId).maybeSingle();
         const localPersisted = getPersistedCredits(userId, null);
         if (!profile && authUser) {
-          const generatedRef = 'NZ-' + Math.floor(10000 + Math.random() * 90000);
+          const generatedRef = authUser.user_metadata?.referral_code || ('NZ-' + Math.floor(10000 + Math.random() * 90000));
           const userName = authUser.user_metadata?.full_name || authUser.user_metadata?.name || (authUser.email ? authUser.email.split('@')[0] : 'Artiste');
           const avatarUrl = authUser.user_metadata?.avatar_url || authUser.user_metadata?.picture || null;
-          const initialCredits = localPersisted !== null ? localPersisted : 0;
-          const { data: insData } = await sb.from('profiles').insert([{
+          const initialCredits = localPersisted !== null ? localPersisted : 3;
+          const { data: insData } = await sb.from('profiles').upsert([{
             id: authUser.id,
             email: authUser.email,
             name: userName,
             avatar_url: avatarUrl,
             credits: initialCredits,
             referral_code: generatedRef
-          }]).select().single();
+          }], { onConflict: 'id' }).select().maybeSingle();
           profile = insData;
         }
 

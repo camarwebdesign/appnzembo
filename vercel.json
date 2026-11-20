@@ -4,10 +4,31 @@
   "outputDirectory": "public",
   "cleanUrls": true,
   "trailingSlash": false,
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, X-Requested-With" }
+      ]
+    },
+    {
+      "source": "/env.local.js",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/env.local.js",
-      "destination": "/api/index.js"
+      "destination": "/api/env.js"
+    },
+    {
+      "source": "/api/env",
+      "destination": "/api/env.js"
     },
     {
       "source": "/api/(.*)",

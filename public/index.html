@@ -399,7 +399,12 @@
             <label class="block font-bold text-slate-700 dark:text-slate-300">Mot de passe :</label>
             <button type="button" onclick="showForgotPasswordModal()" class="text-[11px] font-medium text-nzembo-violet dark:text-cyan-400 hover:underline">Mot de passe oublié ?</button>
           </div>
-          <input type="password" id="auth-input-password" required placeholder="••••••••" class="app-input py-2.5 bg-slate-50 dark:bg-[#120B20] border border-slate-300 dark:border-purple-800 text-slate-900 dark:text-white">
+          <div class="relative">
+            <input type="password" id="auth-input-password" required placeholder="••••••••" class="app-input py-2.5 pr-10 bg-slate-50 dark:bg-[#120B20] border border-slate-300 dark:border-purple-800 text-slate-900 dark:text-white">
+            <button type="button" id="auth-toggle-password-btn" onclick="togglePasswordVisibility('auth-input-password', this)" aria-label="Afficher le mot de passe" aria-pressed="false" title="Afficher le mot de passe" class="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-nzembo-violet dark:hover:text-cyan-300 transition-colors cursor-pointer">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+            </button>
+          </div>
         </div>
 
         <!-- Code de parrainage (optionnel pour inscription) -->
@@ -431,7 +436,7 @@
       </div>
 
       <!-- Bouton Connexion Google OAuth 1-clic -->
-      <button type="button" onclick="handleGoogleSignIn()" class="w-full py-2.5 px-4 rounded-xl border border-slate-300 dark:border-purple-800 bg-white dark:bg-[#120B20] text-slate-800 dark:text-white font-semibold text-xs flex items-center justify-center gap-2.5 hover:bg-slate-50 dark:hover:bg-purple-950/40 transition-all shadow-xs">
+      <button type="button" id="auth-google-btn" onclick="handleGoogleSignIn()" class="w-full py-2.5 px-4 rounded-xl border border-slate-300 dark:border-purple-800 bg-white dark:bg-[#120B20] text-slate-800 dark:text-white font-semibold text-xs flex items-center justify-center gap-2.5 hover:bg-slate-50 dark:hover:bg-purple-950/40 transition-all shadow-xs cursor-pointer">
         <svg class="w-4 h-4" viewBox="0 0 24 24">
           <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
           <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -4276,6 +4281,9 @@
       const modal = document.getElementById('auth-modal');
       if (modal) modal.classList.add('hidden');
       clearAuthErrors();
+      if (typeof resetPasswordVisibility === 'function') {
+        resetPasswordVisibility('auth-input-password', 'auth-toggle-password-btn');
+      }
     }
 
     function clearAuthErrors() {
@@ -4296,12 +4304,15 @@
       const resendBtn = document.getElementById('auth-error-resend-btn');
       if (!box || !txt) return;
       box.classList.remove('hidden');
-      txt.textContent = msg || 'Email ou mot de passe incorrect.';
+      txt.textContent = msg || "Une erreur est survenue lors de l'authentification.";
       if (isUnconfirmed) {
         if (resendBtn) resendBtn.classList.remove('hidden');
         if (forgotLink) forgotLink.classList.add('hidden');
       } else {
-        if (forgotLink) forgotLink.classList.remove('hidden');
+        if (forgotLink) {
+          if (currentAuthMode === 'login') forgotLink.classList.remove('hidden');
+          else forgotLink.classList.add('hidden');
+        }
         if (resendBtn) resendBtn.classList.add('hidden');
       }
     }
@@ -4346,9 +4357,13 @@
       const btn = document.getElementById('auth-submit-btn');
 
       btn.disabled = true;
-      btn.innerHTML = '<span class="flex items-center gap-2"><svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>Connexion en cours...</span>';
+      const loadingLabel = currentAuthMode === 'register' ? 'Création du compte...' : 'Connexion en cours...';
+      btn.innerHTML = `<span class="flex items-center gap-2"><svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>${loadingLabel}</span>`;
 
       try {
+        if (!window.NzemboBackend) {
+          throw new Error('Service d\'authentification non chargé. Actualise la page.');
+        }
         if (currentAuthMode === 'register') {
           const user = await window.NzemboBackend.register(name, email, password, referralCode);
           if (user && user.needsConfirmation) {
@@ -4358,7 +4373,7 @@
           }
           applyLoggedInUser(user);
           hideAuthModal();
-          triggerToast(`Bienvenue ${user.name} ! Ton compte a été créé avec 3 crédits offerts.`, 'success');
+          triggerToast(`Bienvenue ${user.name} ! Ton compte a été créé avec ${user.credits ?? 3} crédits offerts.`, 'success');
         } else {
           const user = await window.NzemboBackend.login(email, password);
           applyLoggedInUser(user);
@@ -4366,11 +4381,12 @@
           triggerToast(`Ravi de te revoir, ${user.name} !`, 'success');
         }
       } catch (err) {
-        if (err.isUnconfirmedEmail) {
+        const errMsg = (err && err.message) ? err.message : (currentAuthMode === 'register' ? 'Erreur lors de la création du compte.' : 'Erreur lors de la connexion.');
+        if (err && err.isUnconfirmedEmail) {
           unconfirmedUserEmail = email;
-          showAuthError("Confirme d'abord ton compte avec le lien reçu par email.", true);
+          showAuthError(errMsg, true);
         } else {
-          showAuthError(err.message || 'Email ou mot de passe incorrect.', false);
+          showAuthError(errMsg, false);
         }
       } finally {
         btn.disabled = false;
@@ -4486,11 +4502,32 @@
       if (modal) modal.classList.add('hidden');
     }
 
+    const EYE_OPEN_SVG = '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
+    const EYE_OFF_SVG = '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>';
+
+    function resetPasswordVisibility(inputId, btnId) {
+      const input = document.getElementById(inputId);
+      const btn = btnId ? document.getElementById(btnId) : null;
+      if (input) input.type = 'password';
+      if (btn) {
+        btn.innerHTML = EYE_OPEN_SVG;
+        btn.setAttribute('aria-label', 'Afficher le mot de passe');
+        btn.setAttribute('title', 'Afficher le mot de passe');
+        btn.setAttribute('aria-pressed', 'false');
+      }
+    }
+
     function togglePasswordVisibility(inputId, btn) {
       const input = document.getElementById(inputId);
       if (!input) return;
-      const isPwd = input.type === 'password';
-      input.type = isPwd ? 'text' : 'password';
+      const reveal = input.type === 'password';
+      input.type = reveal ? 'text' : 'password';
+      if (btn) {
+        btn.innerHTML = reveal ? EYE_OFF_SVG : EYE_OPEN_SVG;
+        btn.setAttribute('aria-label', reveal ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+        btn.setAttribute('title', reveal ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+        btn.setAttribute('aria-pressed', reveal ? 'true' : 'false');
+      }
     }
 
     async function handleResetPasswordSubmit(e) {
@@ -4549,14 +4586,26 @@
     }
 
     async function handleGoogleSignIn() {
+      clearAuthErrors();
+      const gBtn = document.getElementById('auth-google-btn');
+      const prevHtml = gBtn ? gBtn.innerHTML : '';
+      if (gBtn) {
+        gBtn.disabled = true;
+        gBtn.innerHTML = '<span class="flex items-center gap-2"><svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>Redirection vers Google...</span>';
+      }
       try {
         if (!window.NzemboBackend || !window.NzemboBackend.signInWithGoogle) {
-          triggerToast('Connexion avec Google indisponible pour le moment.', 'error');
-          return;
+          throw new Error('Connexion avec Google indisponible : module d\'authentification non chargé.');
         }
         await window.NzemboBackend.signInWithGoogle();
       } catch (err) {
-        triggerToast(err.message || 'Connexion avec Google impossible, réessaie.', 'error');
+        const msg = (err && err.message) ? err.message : 'Erreur lors de la connexion avec Google.';
+        showAuthError(msg, false);
+        triggerToast(msg, 'error');
+        if (gBtn) {
+          gBtn.disabled = false;
+          gBtn.innerHTML = prevHtml;
+        }
       }
     }
 
@@ -12788,7 +12837,7 @@
         const backendUrl = getNzemboBackendBase();
         const returnBase = (window.location.protocol === 'http:' || window.location.protocol === 'https:')
           ? (window.location.origin + window.location.pathname)
-          : 'http://localhost:3001';
+          : 'https://app.nzembo.net';
 
         const response = await fetch(`${backendUrl}/api/payments/saspay/checkout`, {
           method: 'POST',
@@ -14979,7 +15028,15 @@
       // Échange automatique de session ou retour OAuth Google
       if (window.NzemboBackend && typeof window.NzemboBackend.handleAuthSessionExchange === 'function') {
         window.NzemboBackend.handleAuthSessionExchange().then(res => {
-          if (res && res.session && res.session.user) {
+          if (res && res.error) {
+            showAuthModal();
+            showAuthError(res.error, false);
+            triggerToast(res.error, 'error');
+          } else if (res && (res.id || res.email)) {
+            applyLoggedInUser(res);
+            hideAuthModal();
+            triggerToast(`Bienvenue ${res.name || 'sur Nzembo'} !`, 'success');
+          } else if (res && res.session && res.session.user) {
             window.NzemboBackend.refreshUserData().then(u => {
               if (u) {
                 applyLoggedInUser(u);
@@ -14987,7 +15044,13 @@
               }
             }).catch(() => {});
           }
-        }).catch(() => {});
+        }).catch((err) => {
+          if (err && err.message) {
+            showAuthModal();
+            showAuthError(err.message, false);
+            triggerToast(err.message, 'error');
+          }
+        });
       }
 
       // Détection des fragments de confirmation email et réinitialisation de mot de passe
