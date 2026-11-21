@@ -1,8 +1,8 @@
 const crypto = require('crypto');
 const tls = require('tls');
 const { pool, query } = require('./db');
+const { renderPaymentReceiptEmailHtml, sendNzemboEmail } = require('./emails');
 
-// Sur Windows / Node 24+, inclure les certificats racines système tout en gardant la validation TLS active
 if (typeof tls.getCACertificates === 'function' && typeof tls.setDefaultCACertificates === 'function') {
   try {
     tls.setDefaultCACertificates([
@@ -26,7 +26,6 @@ const CURRENCY_RATES = {
   RWF: 1350,
 };
 
-// Codes ISO2 actifs dans /countries/ SasPay (ZA étant inactif, ZAR bascule en USD)
 const CURRENCY_COUNTRY_MAP = {
   CDF: 'CD',
   XOF: 'CI',
@@ -53,11 +52,6 @@ const NAMED_PACKS = {
     amount: 24.99,
     currency: 'EUR',
   },
-};
-
-const PROMO_DISCOUNTS = {
-  NZEMBO: 0.15,
-  PROMO15: 0.15,
 };
 
 function getSaspayConfig() {
@@ -141,20 +135,73 @@ async function saspayRequest(endpointPath, { method = 'GET', body, idempotencyKe
   return unwrapSaspayData(json);
 }
 
-function computeAuthoritativeOrder({ pack_id, pack_name, credits, currency, promo_code }) {
+async function resolvePromoFromDb(rawCode, creditsQty = 1) {
+  const code = String(rawCode || '').trim().toUpperCase();
+  if (!code) return null;
+
+  const res = await query(
+    `SELECT * FROM promo_codes WHERE UPPER(code) = $1 LIMIT 1`,
+    [code]
+  );
+  if (!res.rows || res.rows.length === 0) {
+    const err = new Error(`Code promo « ${code} » invalide ou introuvable.`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const promo = res.rows[0];
+  if (!promo.is_active) {
+    const err = new Error(`Le code promo « ${code} » est désactivé.`);
+    err.statusCode = 400;
+    throw err;
+  }
+  if (promo.expires_at && new Date(promo.expires_at).getTime() <= Date.now()) {
+    const err = new Error(`Le code promo « ${code} » a expiré.`);
+    err.statusCode = 400;
+    throw err;
+  }
+  if (promo.max_uses !== null && promo.max_uses !== undefined && Number(promo.used_count) >= Number(promo.max_uses)) {
+    const err = new Error(`Le code promo « ${code} » a atteint sa limite d'utilisations.`);
+    err.statusCode = 400;
+    throw err;
+  }
+  const minCred = Math.max(1, Number(promo.min_credits) || 1);
+  if (Number(creditsQty) < minCred) {
+    const err = new Error(`Ce code promo requiert au moins ${minCred} crédit(s).`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  return promo;
+}
+
+function applyPromoDiscountUSD(baseUsd, promo) {
+  if (!promo) return { finalUsd: +baseUsd.toFixed(2), discountUsd: 0 };
+  const val = Math.max(0, Number(promo.discount_value) || 0);
+  let discountUsd = 0;
+  if (promo.discount_type === 'fixed_usd') {
+    discountUsd = Math.min(Math.max(0, baseUsd - 0.50), val);
+  } else {
+    const pct = Math.min(99, val);
+    discountUsd = +(baseUsd * (pct / 100)).toFixed(2);
+  }
+  const finalUsd = Math.max(0.50, +(baseUsd - discountUsd).toFixed(2));
+  const actualDiscountUsd = +Math.max(0, baseUsd - finalUsd).toFixed(2);
+  return { finalUsd, discountUsd: actualDiscountUsd };
+}
+
+async function computeAuthoritativeOrder({ pack_id, pack_name, credits, currency, promo_code }) {
   const normalizedPromo = String(promo_code || '').trim().toUpperCase();
-  const discount = PROMO_DISCOUNTS[normalizedPromo] || 0;
 
   if (pack_id && NAMED_PACKS[pack_id]) {
     const pack = NAMED_PACKS[pack_id];
     const requestedCurr = String(currency || pack.currency).trim().toUpperCase();
     const effectiveCurr = CURRENCY_RATES[requestedCurr] ? requestedCurr : pack.currency;
-    const baseUsd = pack.amount / CURRENCY_RATES[pack.currency];
-    const finalUsd = +(baseUsd * (1 - discount)).toFixed(2);
+    const baseUsd = +(pack.amount / CURRENCY_RATES[pack.currency]).toFixed(2);
+    const promoRow = normalizedPromo ? await resolvePromoFromDb(normalizedPromo, pack.credits) : null;
+    const { finalUsd, discountUsd } = applyPromoDiscountUSD(baseUsd, promoRow);
     const rate = CURRENCY_RATES[effectiveCurr];
-    const rawAmount = effectiveCurr === pack.currency && discount === 0
-      ? pack.amount
-      : finalUsd * rate;
+    const rawAmount = effectiveCurr === pack.currency && !promoRow ? pack.amount : finalUsd * rate;
     const formattedAmount = (rate >= 100 ? Math.round(rawAmount) : +rawAmount.toFixed(2)).toFixed(2);
 
     return {
@@ -162,10 +209,14 @@ function computeAuthoritativeOrder({ pack_id, pack_name, credits, currency, prom
       packName: pack_name || pack.name,
       credits: pack.credits,
       amountDecimal: formattedAmount,
+      baseAmountDecimal: ((effectiveCurr === pack.currency ? pack.amount : (rate >= 100 ? Math.round(baseUsd * rate) : +(baseUsd * rate).toFixed(2)))).toFixed(2),
       currency: effectiveCurr,
       amountUSD: finalUsd,
+      baseUSD: baseUsd,
+      discountUSD: discountUsd,
       amountCDF: Math.round(finalUsd * CURRENCY_RATES.CDF),
-      promoCode: discount > 0 ? normalizedPromo : null,
+      promoCode: promoRow ? promoRow.code : null,
+      promo: promoRow,
       country: CURRENCY_COUNTRY_MAP[effectiveCurr] || null,
     };
   }
@@ -177,13 +228,16 @@ function computeAuthoritativeOrder({ pack_id, pack_name, credits, currency, prom
     throw err;
   }
 
+  const promoRow = normalizedPromo ? await resolvePromoFromDb(normalizedPromo, qty) : null;
   const reqCurr = String(currency || 'USD').trim().toUpperCase();
   const effectiveCurr = CURRENCY_RATES[reqCurr] ? reqCurr : 'USD';
   const rate = CURRENCY_RATES[effectiveCurr];
 
-  const baseUsd = qty * CREDIT_PRICE_USD;
-  const finalUsd = +(baseUsd * (1 - discount)).toFixed(2);
+  const baseUsd = +(qty * CREDIT_PRICE_USD).toFixed(2);
+  const { finalUsd, discountUsd } = applyPromoDiscountUSD(baseUsd, promoRow);
+  const rawBaseAmount = baseUsd * rate;
   const rawAmount = finalUsd * rate;
+  const normalizedBaseAmount = rate >= 100 ? Math.round(rawBaseAmount) : +rawBaseAmount.toFixed(2);
   const normalizedAmount = rate >= 100 ? Math.round(rawAmount) : +rawAmount.toFixed(2);
 
   return {
@@ -191,10 +245,14 @@ function computeAuthoritativeOrder({ pack_id, pack_name, credits, currency, prom
     packName: pack_name || `Recharge ${qty} Crédits`,
     credits: qty,
     amountDecimal: normalizedAmount.toFixed(2),
+    baseAmountDecimal: normalizedBaseAmount.toFixed(2),
     currency: effectiveCurr,
     amountUSD: finalUsd,
+    baseUSD: baseUsd,
+    discountUSD: discountUsd,
     amountCDF: Math.round(finalUsd * CURRENCY_RATES.CDF),
-    promoCode: discount > 0 ? normalizedPromo : null,
+    promoCode: promoRow ? promoRow.code : null,
+    promo: promoRow,
     country: CURRENCY_COUNTRY_MAP[effectiveCurr] || null,
   };
 }
@@ -214,7 +272,7 @@ function sanitizeFrontendReturnUrl(rawUrl) {
       'app.nzembo.net',
       'nzembo.net',
       'www.nzembo.net',
-      'admin.nzembo.net'
+      'admin.nzembo.net',
     ]);
     if (process.env.VERCEL_URL) {
       allowedHosts.add(String(process.env.VERCEL_URL).replace(/^https?:\/\//i, '').split('/')[0]);
@@ -265,7 +323,7 @@ function verifyWebhookSignature(rawBodyBuffer, signatureHeader, timestampHeader,
 async function getUserBalance(userId, userEmail) {
   let res = await query('SELECT id, credits FROM users WHERE id = $1', [userId]);
   if (res.rows.length === 0 && userEmail) {
-    res = await query('SELECT id, credits FROM users WHERE email = $1', [userEmail]);
+    res = await query('SELECT id, credits FROM users WHERE LOWER(email) = LOWER($1)', [userEmail]);
   }
   if (res.rows.length === 0) return 0;
   return Math.max(0, Number(res.rows[0].credits) || 0);
@@ -307,7 +365,7 @@ async function creditOrderOnce(order, { paymentId = null, reference = null, rawP
 
     let userRes = await client.query('SELECT id, credits FROM users WHERE id = $1 FOR UPDATE', [updatedOrder.user_id]);
     if (userRes.rows.length === 0 && updatedOrder.user_email) {
-      userRes = await client.query('SELECT id, credits FROM users WHERE email = $1 FOR UPDATE', [updatedOrder.user_email]);
+      userRes = await client.query('SELECT id, credits FROM users WHERE LOWER(email) = LOWER($1) FOR UPDATE', [updatedOrder.user_email]);
     }
 
     let dbUserId = updatedOrder.user_id;
@@ -332,6 +390,13 @@ async function creditOrderOnce(order, { paymentId = null, reference = null, rawP
       newBalance = Number(ins.rows[0].credits) || creditsToAdd;
     }
 
+    if (updatedOrder.promo_code) {
+      await client.query(
+        `UPDATE promo_codes SET used_count = used_count + 1, updated_at = NOW() WHERE UPPER(code) = UPPER($1)`,
+        [updatedOrder.promo_code]
+      );
+    }
+
     const txId = `TX-SP-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`;
     const amountUSD = Number(((Number(updatedOrder.amount) || 0) / (CURRENCY_RATES[updatedOrder.currency] || 1)).toFixed(2));
     const amountCDF = Math.round(amountUSD * CURRENCY_RATES.CDF);
@@ -342,7 +407,7 @@ async function creditOrderOnce(order, { paymentId = null, reference = null, rawP
       [
         txId,
         dbUserId,
-        `${updatedOrder.pack_name} (${creditsToAdd} crédit${creditsToAdd > 1 ? 's' : ''})`,
+        `${updatedOrder.pack_name} (${creditsToAdd} crédit${creditsToAdd > 1 ? 's' : ''})${updatedOrder.promo_code ? ' · Code ' + updatedOrder.promo_code : ''}`,
         creditsToAdd,
         amountUSD,
         amountCDF,
@@ -351,7 +416,31 @@ async function creditOrderOnce(order, { paymentId = null, reference = null, rawP
       ]
     );
 
+    await client.query(
+      `INSERT INTO user_notifications (id, user_id, target, category, category_label, badge_color, title, subject, content, is_error)
+       VALUES ($1, $2, $2, 'info', 'Paiement validé', 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300', $3, $4, $5, FALSE)`,
+      [
+        `notif_pay_${Date.now()}_${crypto.randomBytes(2).toString('hex')}`,
+        dbUserId,
+        'Crédits ajoutés à ton compte',
+        `+${creditsToAdd} crédits disponibles (${updatedOrder.amount} ${updatedOrder.currency})`,
+        `Ton paiement SasPay (${updatedOrder.id}) a été confirmé. Nouveau solde : ${newBalance} crédits.`,
+      ]
+    );
+
     await client.query('COMMIT');
+
+    if (updatedOrder.user_email && !updatedOrder.user_email.endsWith('@users.nzembo.local')) {
+      const receiptMail = renderPaymentReceiptEmailHtml({
+        userName: updatedOrder.user_name,
+        credits: creditsToAdd,
+        amount: updatedOrder.amount,
+        currency: updatedOrder.currency,
+        promoCode: updatedOrder.promo_code,
+        orderId: updatedOrder.id,
+      });
+      sendNzemboEmail({ to: updatedOrder.user_email, ...receiptMail }).catch(() => {});
+    }
 
     return {
       newlyCredited: true,
@@ -380,7 +469,6 @@ async function findOrder({ orderId, sessionId, paymentId }) {
     const r = await query('SELECT * FROM payment_transactions WHERE saspay_payment_id = $1', [paymentId]);
     if (r.rows[0]) return r.rows[0];
 
-    // Si le webhook arrive avant le retour navigateur, rechercher parmi les sessions PENDING récentes
     const pendingRes = await query(
       `SELECT * FROM payment_transactions
        WHERE status = 'PENDING' AND credited = FALSE AND checkout_session_id IS NOT NULL
@@ -389,9 +477,7 @@ async function findOrder({ orderId, sessionId, paymentId }) {
     );
     for (const row of pendingRes.rows) {
       try {
-        const st = await saspayRequest(
-          `/checkout-sessions/${encodeURIComponent(row.checkout_session_id)}/status/`
-        );
+        const st = await saspayRequest(`/checkout-sessions/${encodeURIComponent(row.checkout_session_id)}/status/`);
         if (st && st.transaction_id) {
           await query(
             'UPDATE payment_transactions SET saspay_payment_id = $2, updated_at = NOW() WHERE id = $1',
@@ -430,9 +516,7 @@ async function verifyAndFulfillOrder({ orderId = null, sessionId = null, payment
   let resolvedPaymentId = paymentId || order.saspay_payment_id || null;
 
   if (order.checkout_session_id) {
-    sessionStatusData = await saspayRequest(
-      `/checkout-sessions/${encodeURIComponent(order.checkout_session_id)}/status/`
-    );
+    sessionStatusData = await saspayRequest(`/checkout-sessions/${encodeURIComponent(order.checkout_session_id)}/status/`);
     if (sessionStatusData.transaction_id) {
       resolvedPaymentId = sessionStatusData.transaction_id;
     }
@@ -440,9 +524,7 @@ async function verifyAndFulfillOrder({ orderId = null, sessionId = null, payment
 
   let verifyData = null;
   if (resolvedPaymentId) {
-    verifyData = await saspayRequest(
-      `/payments/${encodeURIComponent(resolvedPaymentId)}/verify/`
-    );
+    verifyData = await saspayRequest(`/payments/${encodeURIComponent(resolvedPaymentId)}/verify/`);
   }
 
   const txStatus = String(
@@ -452,35 +534,32 @@ async function verifyAndFulfillOrder({ orderId = null, sessionId = null, payment
   ).toUpperCase();
   const sessStatus = String((sessionStatusData && sessionStatusData.status) || '').toUpperCase();
 
-  const isSuccess =
-    (verifyData && txStatus === 'SUCCESS') ||
-    (!resolvedPaymentId && sessStatus === 'PAID' && txStatus === 'SUCCESS');
+  if (txStatus === 'SUCCESS') {
+    const paidAmount = Number(
+      (verifyData && verifyData.amount) || (sessionStatusData && sessionStatusData.amount) || order.amount
+    );
+    const expectedAmount = Number(order.amount);
+    const paidCurr = String((verifyData && verifyData.currency) || order.currency).toUpperCase();
+    const expectedCurr = String(order.currency).toUpperCase();
 
-  if (isSuccess) {
-    const verifiedCurrency = String((verifyData && verifyData.currency) || order.currency).toUpperCase();
-    const verifiedAmount = verifyData
-      ? Number(verifyData.requested_amount || verifyData.net_amount || verifyData.amount || 0)
-      : Number(order.amount);
-
-    if (
-      verifyData &&
-      verifiedCurrency === String(order.currency).toUpperCase() &&
-      verifiedAmount + 0.01 < Number(order.amount)
-    ) {
+    if (paidCurr !== expectedCurr || Math.abs(paidAmount - expectedAmount) > 1) {
       await query(
-        `UPDATE payment_transactions SET status = 'AMOUNT_MISMATCH', raw_payload = $2, updated_at = NOW() WHERE id = $1`,
-        [order.id, JSON.stringify({ sessionStatusData, verifyData })]
+        `UPDATE payment_transactions SET status = 'AMOUNT_MISMATCH', raw_payload = $2::jsonb, updated_at = NOW() WHERE id = $1`,
+        [order.id, JSON.stringify({ verifyData, sessionStatusData })]
       );
-      return { found: true, verified: false, status: 'FAILED', reason: 'amount_mismatch', order };
+      return {
+        found: true,
+        verified: false,
+        status: 'AMOUNT_MISMATCH',
+        balance: await getUserBalance(order.user_id, order.user_email),
+        order,
+      };
     }
 
-    const fulfillment = await creditOrderOnce(order, {
-      paymentId: resolvedPaymentId,
-      reference:
-        (verifyData && verifyData.reference) ||
-        (sessionStatusData && sessionStatusData.transaction_reference) ||
-        null,
-      rawPayload: { sessionStatusData, verifyData },
+    const creditedResult = await creditOrderOnce(order, {
+      paymentId: (verifyData && verifyData.id) || resolvedPaymentId,
+      reference: (verifyData && verifyData.reference) || null,
+      rawPayload: verifyData || sessionStatusData,
     });
 
     return {
@@ -488,60 +567,57 @@ async function verifyAndFulfillOrder({ orderId = null, sessionId = null, payment
       verified: true,
       status: 'SUCCESS',
       credited: true,
-      newlyCredited: fulfillment.newlyCredited,
-      alreadyCredited: fulfillment.alreadyCredited,
-      balance: fulfillment.balance,
-      order: fulfillment.order,
+      newlyCredited: creditedResult.newlyCredited,
+      alreadyCredited: creditedResult.alreadyCredited,
+      balance: creditedResult.balance,
+      order: creditedResult.order,
     };
   }
 
-  if (txStatus === 'FAILED' || txStatus === 'CANCELLED' || sessStatus === 'EXPIRED' || sessStatus === 'CANCELLED') {
-    await query(
-      `UPDATE payment_transactions
-       SET status = $2,
-           saspay_payment_id = COALESCE($3, saspay_payment_id),
-           raw_payload = $4::jsonb,
-           updated_at = NOW()
-       WHERE id = $1`,
-      [order.id, txStatus || sessStatus || 'FAILED', resolvedPaymentId, JSON.stringify({ sessionStatusData, verifyData })]
-    );
-    const balance = await getUserBalance(order.user_id, order.user_email);
-    return { found: true, verified: false, status: 'FAILED', balance, order };
-  }
+  const nextStatus =
+    txStatus === 'FAILED' || txStatus === 'CANCELLED'
+      ? txStatus
+      : sessStatus === 'EXPIRED'
+        ? 'EXPIRED'
+        : 'PENDING';
 
-  if (resolvedPaymentId && !order.saspay_payment_id) {
-    await query(
-      `UPDATE payment_transactions SET saspay_payment_id = $2, updated_at = NOW() WHERE id = $1`,
-      [order.id, resolvedPaymentId]
-    );
-  }
+  await query(
+    `UPDATE payment_transactions
+     SET status = $2,
+         saspay_payment_id = COALESCE($3, saspay_payment_id),
+         raw_payload = COALESCE($4::jsonb, raw_payload),
+         updated_at = NOW()
+     WHERE id = $1 AND credited = FALSE`,
+    [
+      order.id,
+      nextStatus,
+      resolvedPaymentId,
+      JSON.stringify(verifyData || sessionStatusData || {}),
+    ]
+  );
 
-  const balance = await getUserBalance(order.user_id, order.user_email);
-  return { found: true, verified: false, status: 'PENDING', balance, order };
+  return {
+    found: true,
+    verified: false,
+    status: nextStatus,
+    credited: false,
+    balance: await getUserBalance(order.user_id, order.user_email),
+    order,
+  };
 }
 
 function registerSaspayRoutes(app) {
-  // 1. Créer une session de paiement hébergée SasPay (POST /api/payments/saspay/checkout)
+  // 1. Initialisation d'une session de paiement hébergée SasPay (POST /api/payments/saspay/checkout)
   app.post('/api/payments/saspay/checkout', async (req, res) => {
     try {
-      const {
-        user_id,
-        user_email,
-        user_name,
-        pack_id,
-        pack_name,
-        credits,
-        currency,
-        promo_code,
-        frontend_return_url,
-      } = req.body || {};
+      const { user_id, user_email, user_name, pack_id, pack_name, credits, currency, promo_code, frontend_return_url } = req.body || {};
 
       const userId = String(user_id || '').trim();
       if (!userId) {
         return res.status(400).json({ success: false, error: 'Identifiant utilisateur (user_id) requis.' });
       }
 
-      const orderSpec = computeAuthoritativeOrder({
+      const orderSpec = await computeAuthoritativeOrder({
         pack_id,
         pack_name,
         credits,
@@ -562,8 +638,8 @@ function registerSaspayRoutes(app) {
 
       await query(
         `INSERT INTO payment_transactions
-         (id, provider, user_id, user_email, user_name, pack_id, pack_name, credits, amount, currency, promo_code, frontend_return_url, status)
-         VALUES ($1, 'saspay', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'PENDING')`,
+         (id, provider, user_id, user_email, user_name, pack_id, pack_name, credits, amount, currency, promo_code, discount_amount_usd, frontend_return_url, status)
+         VALUES ($1, 'saspay', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'PENDING')`,
         [
           orderId,
           userId,
@@ -575,6 +651,7 @@ function registerSaspayRoutes(app) {
           orderSpec.amountDecimal,
           orderSpec.currency,
           orderSpec.promoCode,
+          orderSpec.discountUSD || 0,
           safeFrontendUrl,
         ]
       );
@@ -582,7 +659,7 @@ function registerSaspayRoutes(app) {
       const saspayPayload = {
         amount: orderSpec.amountDecimal,
         currency: orderSpec.currency,
-        description: `Nzembo — ${orderSpec.packName} (${orderSpec.credits} crédits)`,
+        description: `nZembo — ${orderSpec.packName} (${orderSpec.credits} crédits)${orderSpec.promoCode ? ' [Promo ' + orderSpec.promoCode + ']' : ''}`,
         customer_email: customerEmail,
         customer_name: customerName,
         return_url: returnUrl,
@@ -592,6 +669,7 @@ function registerSaspayRoutes(app) {
           credits: orderSpec.credits,
           pack_id: orderSpec.packId,
           pack_name: orderSpec.packName,
+          promo_code: orderSpec.promoCode || '',
         },
       };
       if (orderSpec.country) {
@@ -624,6 +702,9 @@ function registerSaspayRoutes(app) {
         sessionId: sessionData.id,
         checkoutUrl: sessionData.checkout_url,
         amount: orderSpec.amountDecimal,
+        baseAmount: orderSpec.baseAmountDecimal,
+        discountUSD: orderSpec.discountUSD,
+        promoCode: orderSpec.promoCode,
         currency: orderSpec.currency,
         credits: orderSpec.credits,
       });
@@ -637,7 +718,7 @@ function registerSaspayRoutes(app) {
     }
   });
 
-  // 2. Route de retour navigateur après paiement SasPay (GET /api/payments/saspay/callback)
+  // 2. Callback navigateur après paiement SasPay
   app.get('/api/payments/saspay/callback', async (req, res) => {
     const orderId = req.query.order_id ? String(req.query.order_id) : null;
     const sessionId = req.query.session_id ? String(req.query.session_id) : null;
@@ -691,6 +772,7 @@ function registerSaspayRoutes(app) {
         packName: result.order ? result.order.pack_name : '',
         amount: result.order ? result.order.amount : '0.00',
         currency: result.order ? result.order.currency : 'USD',
+        promoCode: result.order ? result.order.promo_code : null,
         balance: result.balance,
       });
     } catch (err) {
@@ -754,10 +836,48 @@ function registerSaspayRoutes(app) {
       return res.status(500).json({ success: false, error: err.message });
     }
   });
+
+  // 6. Vérification publique de code promo (GET /api/promos/validate)
+  app.get('/api/promos/validate', async (req, res) => {
+    try {
+      const code = String(req.query.code || '').trim().toUpperCase();
+      const qty = Math.max(1, parseInt(req.query.credits, 10) || 1);
+      const curr = String(req.query.currency || 'USD').trim().toUpperCase();
+      if (!code) {
+        return res.status(400).json({ success: false, valid: false, error: 'Entre un code promo.' });
+      }
+      const orderSpec = await computeAuthoritativeOrder({
+        credits: qty,
+        currency: curr,
+        promo_code: code,
+      });
+      return res.json({
+        success: true,
+        valid: true,
+        code: orderSpec.promo.code,
+        discountType: orderSpec.promo.discount_type,
+        discountValue: Number(orderSpec.promo.discount_value),
+        minCredits: Number(orderSpec.promo.min_credits) || 1,
+        description: orderSpec.promo.description || '',
+        baseAmount: orderSpec.baseAmountDecimal,
+        finalAmount: orderSpec.amountDecimal,
+        discountUSD: orderSpec.discountUSD,
+        currency: orderSpec.currency,
+      });
+    } catch (err) {
+      return res.status(err.statusCode || 400).json({
+        success: false,
+        valid: false,
+        error: err.message || 'Code promo invalide.',
+      });
+    }
+  });
 }
 
 module.exports = {
   registerSaspayRoutes,
   verifyWebhookSignature,
   computeAuthoritativeOrder,
+  resolvePromoFromDb,
+  creditOrderOnce,
 };

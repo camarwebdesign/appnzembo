@@ -7,36 +7,37 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 dotenv.config({ path: path.join(__dirname, 'server', '.env') });
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 const app = express();
-const envHandler = require('./api/env');
-
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  res.setHeader('Access-Control-Allow-Origin', origin || '*');
-  res.setHeader('Vary', 'Origin');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  return next();
-});
 
 function sendAppView(_req, res) {
   return res.sendFile(path.join(PUBLIC_DIR, 'app.html'));
 }
 
-// Endpoint client env.local.js (sert le fichier local en dev, ou expose la config publique depuis process.env / repli sûr en production)
-app.get(['/env.local.js', '/api/env'], (req, res) => {
+// Endpoint client env.local.js (sert le fichier local en dev, ou expose la config publique depuis process.env en production)
+app.get('/env.local.js', (_req, res) => {
   const localEnvFile = path.join(PUBLIC_DIR, 'env.local.js');
-  if (req.path === '/env.local.js' && fs.existsSync(localEnvFile)) {
+  if (fs.existsSync(localEnvFile)) {
     return res.sendFile(localEnvFile);
   }
-  return envHandler(req, res);
+  const clientEnv = {
+    BACKEND_URL: (process.env.BACKEND_URL || '').trim(),
+    SUPABASE_URL: (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://xmkdtbwurwtigkdjehhz.supabase.co').trim(),
+    SUPABASE_ANON_KEY: (process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhta2R0Ynd1cnd0aWdrZGplaGh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzMzU2NTEsImV4cCI6MjEwOTkxMTY1MX0.Yt9RqMgyHgQIbqK7SHZRgaAgltjQELZtylqGc1kM--Y').trim(),
+    ENGINE_BEARER_TOKEN: (
+      process.env.ENGINE_BEARER_TOKEN ||
+      process.env.NEXT_PUBLIC_ENGINE_BEARER_TOKEN ||
+      process.env.SUNO_BEARER_TOKEN ||
+      process.env.SUNO_API_KEY ||
+      ''
+    ).trim()
+  };
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  return res.send(`window.__NZEMBO_ENV__ = ${JSON.stringify(clientEnv)};`);
 });
 
-// Montage des routes API Backend existantes (SasPay, Neon DB, Suno, Auth) sans altérer req.rawBody
+// Montage des routes API Backend existantes (Neon DB, SasPay, Proxy Moteur Audio) sans altérer req.rawBody
 let backendServer = null;
 if (process.env.DATABASE_URL) {
   try {
@@ -54,13 +55,51 @@ if (process.env.DATABASE_URL) {
 }
 
 if (!backendServer) {
+  app.use('/api', express.json({ limit: '30mb' }));
   app.get('/api/health', (_req, res) => {
     res.json({
       status: 'ok',
-      service: 'Nzembo Studio Application (app.nzembo.net)',
-      database: 'not_configured'
+      service: 'Nzembo App Studio (app.nzembo.net)',
+      database: 'not_configured',
+      engine: Boolean(process.env.SUNO_API_KEY || process.env.SUNO_BEARER_TOKEN || process.env.ENGINE_BEARER_TOKEN)
     });
   });
+
+  // Garantir que le proxy moteur audio reste opérationnel même sans DATABASE_URL
+  const SUNO_HOSTS = ['https://api.sunoapi.org/api/v1', 'https://apibox.erweima.ai/api/v1'];
+  app.all('/api/engine/*', async (req, res) => {
+    const key = (process.env.SUNO_API_KEY || process.env.SUNO_BEARER_TOKEN || process.env.ENGINE_BEARER_TOKEN || '').trim();
+    if (!key) return res.status(500).json({ code: 500, msg: 'Clé moteur non configurée.' });
+    const subPath = String(req.originalUrl || req.url).replace(/^\/api\/engine/, '') || '/';
+    const cleanSub = subPath.startsWith('/') ? subPath : `/${subPath}`;
+    if (cleanSub === '/upload-base64' && req.method.toUpperCase() === 'POST') {
+      try {
+        const { base64Data, uploadPath = 'nzembo/audio', fileName = `audio_${Date.now()}.mp3` } = req.body || {};
+        const r = await fetch('https://sunoapiorg.redpandaai.co/api/file-base64-upload', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ base64Data, uploadPath, fileName }),
+        });
+        return res.status(r.status).json(await r.json().catch(() => ({})));
+      } catch (e) {
+        return res.status(502).json({ success: false, error: e.message });
+      }
+    }
+    for (const host of SUNO_HOSTS) {
+      try {
+        const opts = { method: req.method, headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' } };
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          opts.headers['Content-Type'] = 'application/json';
+          opts.body = JSON.stringify(req.body || {});
+        }
+        const upstream = await fetch(`${host}${cleanSub === '/health' ? '/generate/credit' : cleanSub}`, opts);
+        const parsed = await upstream.json().catch(() => ({}));
+        if (upstream.ok || upstream.status === 400 || upstream.status === 429) return res.status(upstream.status).json(parsed);
+      } catch {}
+    }
+    return res.status(502).json({ code: 502, msg: 'Moteur injoignable.' });
+  });
+
   app.all('/api/*', (_req, res) => {
     res.status(503).json({
       success: false,
@@ -82,13 +121,9 @@ app.get(['/public/:asset', '/app/:asset'], (req, res, next) => {
   return next();
 });
 
-// Service des fichiers statiques (index désactivé pour contrôler le routage SPA)
 app.use(express.static(PUBLIC_DIR, { index: false }));
+app.get(['/', '/app', '/app/*'], sendAppView);
 
-// Routes principales du Studio utilisateur
-app.get(['/', '/app', '/app/*', '/invite/*'], sendAppView);
-
-// Fallback SPA (hors /api et fichiers statiques avec extension)
 app.get('*', (req, res, next) => {
   if (!req.path.startsWith('/api/') && !path.extname(req.path)) {
     return sendAppView(req, res);
@@ -99,11 +134,13 @@ app.get('*', (req, res, next) => {
 if (require.main === module) {
   const startServer = () => {
     app.listen(PORT, () => {
-      console.log(`🎧 [Nzembo Studio - app.nzembo.net] Actif sur http://localhost:${PORT}`);
+      console.log(`🎵 [Nzembo Studio - app.nzembo.net] Actif sur http://localhost:${PORT}`);
     });
   };
   if (backendServer && typeof backendServer.ensureDbReady === 'function') {
-    backendServer.ensureDbReady().then(startServer).catch(startServer);
+    backendServer.ensureDbReady().catch((err) => {
+      console.error('❌ [DB Init Error]:', err.message);
+    }).finally(startServer);
   } else {
     startServer();
   }

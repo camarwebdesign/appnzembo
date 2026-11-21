@@ -1,9 +1,8 @@
-// nzembo-client.js - Moteur client autonome Nzembo Full-Stack
-// Intégration complète : Supabase (Auth, Storage Bucket 'nzembo-media', Database PostgreSQL 'creations' & 'profiles')
-// et Moteur Audio IA Nzembo pour la génération musicale, vidéos MP4 visualiseur, covers & stems.
+// nzembo-client.js - Moteur client autonome nZembo Full-Stack
+// Intégration complète : Auth OTP & OAuth, Base PostgreSQL unifiée, Stockage média,
+// Crédits autoritaires (0 à l'inscription) & Proxy Moteur Audio IA Multi-Outils.
 
 (function(window) {
-  // ================= CONFIGURATION SUPABASE & MOTEUR AUDIO IA =================
   function resolveNzemboEnv() {
     if (typeof window !== 'undefined' && window.__NZEMBO_ENV__) {
       return window.__NZEMBO_ENV__;
@@ -37,96 +36,96 @@
     return {};
   }
 
-  const DEFAULT_PUBLIC_SUPABASE_URL = "https://xmkdtbwurwtigkdjehhz.supabase.co";
-  const DEFAULT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhta2R0Ynd1cnd0aWdrZGplaGh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzMzU2NTEsImV4cCI6MjEwOTkxMTY1MX0.Yt9RqMgyHgQIbqK7SHZRgaAgltjQELZtylqGc1kM--Y";
+  const DEFAULT_PUBLIC_AUTH_URL = "https://xmkdtbwurwtigkdjehhz.supabase.co";
+  const DEFAULT_PUBLIC_AUTH_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhta2R0Ynd1cnd0aWdrZGplaGh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzMzU2NTEsImV4cCI6MjEwOTkxMTY1MX0.Yt9RqMgyHgQIbqK7SHZRgaAgltjQELZtylqGc1kM--Y";
 
-  const _nzemboEnv = resolveNzemboEnv();
-  let SUPABASE_URL = _nzemboEnv.SUPABASE_URL || _nzemboEnv.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_PUBLIC_SUPABASE_URL;
-  let SUPABASE_ANON_KEY = _nzemboEnv.SUPABASE_ANON_KEY || _nzemboEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY || DEFAULT_PUBLIC_SUPABASE_ANON_KEY;
+  function getEnvConfig() {
+    const e = resolveNzemboEnv() || {};
+    return {
+      BACKEND_URL: (e.BACKEND_URL || '').trim(),
+      SUPABASE_URL: (e.SUPABASE_URL || e.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_PUBLIC_AUTH_URL).trim(),
+      SUPABASE_ANON_KEY: (e.SUPABASE_ANON_KEY || e.NEXT_PUBLIC_SUPABASE_ANON_KEY || DEFAULT_PUBLIC_AUTH_KEY).trim(),
+      ENGINE_BEARER_TOKEN: (e.ENGINE_BEARER_TOKEN || e.NEXT_PUBLIC_ENGINE_BEARER_TOKEN || e.SUNO_BEARER_TOKEN || e.SUNO_API_KEY || '').trim()
+    };
+  }
+
   const STORAGE_BUCKET = "nzembo-media";
-
-  const ENGINE_BEARER_TOKEN = _nzemboEnv.ENGINE_BEARER_TOKEN || _nzemboEnv.SUNO_BEARER_TOKEN || _nzemboEnv.SUNO_API_KEY || "";
   const DIRECT_ENGINE_BASE = "https://api.sunoapi.org/api/v1";
+  const MIRROR_ENGINE_BASE = "https://apibox.erweima.ai/api/v1";
   const FILE_UPLOAD_BASE = "https://sunoapiorg.redpandaai.co/api";
   const WEBHOOK_NOOP_URL = "https://nzembo.net/api/webhook-noop";
+  const SESSION_KEY = 'nzembo_auth_user';
+  const PENDING_OTP_KEY = 'nzembo_pending_otp';
 
-  // Formatage explicite et clair des erreurs d'authentification (Supabase, réseau, CORS, OAuth, serveur)
-  function formatAuthError(errOrMsg, fallback = "Erreur serveur lors de l'authentification.") {
+  function getBackendApiBase() {
+    const env = getEnvConfig();
+    if (env.BACKEND_URL) return env.BACKEND_URL.replace(/\/+$/, '');
+    if (typeof window !== 'undefined' && window.location) {
+      const proto = window.location.protocol;
+      if (proto === 'http:' || proto === 'https:') {
+        return window.location.origin.replace(/\/+$/, '');
+      }
+    }
+    return 'http://localhost:3000';
+  }
+
+  function formatAuthError(errOrMsg, fallback = "Une erreur est survenue lors de l'authentification.") {
     const rawMsg = (errOrMsg && typeof errOrMsg === 'object') ? (errOrMsg.message || errOrMsg.error_description || errOrMsg.msg || '') : String(errOrMsg || '');
     const statusCode = (errOrMsg && typeof errOrMsg === 'object' && errOrMsg.status) ? Number(errOrMsg.status) : 0;
     const str = String(rawMsg || '').trim();
 
-    if (/Invalid login credentials/i.test(str)) {
-      return "E-mail ou mot de passe incorrect.";
-    }
-    if (/Email not confirmed/i.test(str)) {
-      return "E-mail non confirmé : clique d'abord sur le lien reçu dans ta boîte mail.";
-    }
-    if (/User already registered|already been registered|email_exists/i.test(str)) {
-      return "Un compte existe déjà avec cette adresse e-mail. Connecte-toi.";
-    }
-    if (/Password should be at least|weak_password/i.test(str)) {
-      return "Le mot de passe doit comporter au moins 6 caractères.";
-    }
-    if (/Unable to validate email address|invalid.*email|validation_failed/i.test(str)) {
-      return "Adresse e-mail invalide. Vérifie le format saisi.";
-    }
-    if (/Signups not allowed|signup_disabled/i.test(str)) {
-      return "La création de compte est temporairement désactivée sur le serveur d'authentification.";
-    }
+    if (/Invalid login credentials/i.test(str)) return "E-mail ou mot de passe incorrect.";
+    if (/Email not confirmed/i.test(str)) return "Entre le code de validation reçu par e-mail pour activer ton compte.";
+    if (/User already registered|already been registered|email_exists/i.test(str)) return "Un compte existe déjà avec cette adresse e-mail. Connecte-toi.";
+    if (/Password should be at least|weak_password/i.test(str)) return "Le mot de passe doit comporter au moins 6 caractères.";
+    if (/Unable to validate email address|invalid.*email|validation_failed/i.test(str)) return "Adresse e-mail invalide. Vérifie le format saisi.";
+    if (/Signups not allowed|signup_disabled/i.test(str)) return "La création de compte est temporairement désactivée.";
     if (/security purposes|rate limit|too many requests|over_email_send_rate_limit/i.test(str)) {
-      return "Trop de tentatives ou limite d'envoi d'e-mails atteinte. Réessaie dans quelques minutes.";
+      return "Un code vient déjà d'être envoyé. Patiente quelques instants avant de renvoyer.";
     }
-    if (/Token has expired|invalid token|otp_expired/i.test(str)) {
-      return "Ce lien a expiré ou est invalide. Fais une nouvelle demande.";
+    if (/Token has expired|invalid token|otp_expired|invalid.*otp/i.test(str)) {
+      return "Code invalide ou expiré. Vérifie les 6 chiffres reçus ou demande un nouveau code.";
     }
     if (/Unsupported provider|provider is not enabled/i.test(str)) {
-      return "La connexion Google (OAuth) n'est pas encore activée dans Supabase Auth.";
+      return "La connexion Google (OAuth) n'est pas encore activée côté serveur.";
     }
     if (/redirect_uri_mismatch|redirect_to|not allowed/i.test(str)) {
       const origin = (typeof window !== 'undefined' && window.location) ? window.location.origin : 'https://app.nzembo.net';
-      return `URL de redirection non autorisée par le serveur (${origin}).`;
+      return `URL de redirection non autorisée (${origin}).`;
     }
     if (/Database error saving new user/i.test(str)) {
-      return "Erreur base de données lors de l'enregistrement du nouveau profil utilisateur.";
+      return "Erreur base de données lors de la création de ton profil.";
     }
     if (/Invalid API key|No API key found|apikey/i.test(str)) {
-      return "Clé d'authentification Supabase invalide ou manquante côté serveur.";
+      return "Configuration d'authentification nZembo manquante côté serveur.";
     }
     if (/failed to fetch|networkerror|network error|load failed|err_network|timeout/i.test(str)) {
-      return "Problème de connexion au serveur d'authentification (réseau indisponible ou CORS bloqué).";
+      return "Impossible de joindre le serveur nZembo. Vérifie ta connexion internet.";
     }
     if (/access_denied|user_cancelled|cancelled/i.test(str)) {
-      return "Connexion Google annulée par l'utilisateur.";
+      return "Connexion Google annulée.";
     }
-    if (str) {
-      return statusCode ? `${str} (Code ${statusCode})` : str;
-    }
+
+    const cleaned = str
+      .replace(/https?:\/\/[^\s"'<>]*/gi, '')
+      .replace(/\b(?:supabase|postgres|postgresql|neon|jwt)\b/gi, 'nZembo')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    if (cleaned) return statusCode && cleaned === str ? `${cleaned} (Code ${statusCode})` : cleaned;
     return fallback;
   }
 
-  function buildAuthRedirectUrl(hashSuffix = '') {
-    if (typeof window !== 'undefined' && window.location && /^https?:/i.test(window.location.protocol)) {
-      const p = window.location.pathname || '/';
-      const basePath = p.startsWith('/app') ? '/app' : '';
-      return window.location.origin + basePath + hashSuffix;
-    }
-    return 'https://app.nzembo.net' + hashSuffix;
-  }
-
-  // Masquage absolu de tout nom de fournisseur tiers dans les messages visibles ou erreurs
   function sanitizeApiErrorMessage(rawMsg, fallback = "Une erreur est survenue lors du traitement, réessaie.") {
     if (!rawMsg) return fallback;
     const str = String(rawMsg);
-    if (/Invalid login credentials/i.test(str)) return "Email ou mot de passe incorrect.";
-    if (/Email not confirmed/i.test(str)) return "Confirme d'abord ton compte avec le lien reçu par email.";
-    if (/User already registered/i.test(str)) return "Un compte existe déjà avec cette adresse email.";
-    if (/Password should be at least 6/i.test(str)) return "Le mot de passe doit comporter au moins 6 caractères.";
-    if (/security purposes|rate limit|too many requests/i.test(str)) return "Trop de tentatives, réessaie dans quelques minutes.";
-    if (/Token has expired|invalid token/i.test(str)) return "Le lien est expiré ou invalide. Fais une nouvelle demande.";
+    if (/Invalid login credentials/i.test(str)) return "E-mail ou mot de passe incorrect.";
+    if (/Email not confirmed/i.test(str)) return "Valide ton compte avec le code reçu par e-mail.";
+    if (/User already registered/i.test(str)) return "Un compte existe déjà avec cette adresse e-mail.";
+    if (/Password should be at least/i.test(str)) return "Le mot de passe doit comporter au moins 6 caractères.";
+    if (/security purposes|rate limit|too many requests/i.test(str)) return "Trop de tentatives, réessaie dans quelques instants.";
+    if (/Token has expired|invalid token|otp_expired/i.test(str)) return "Le code est expiré ou invalide. Demande un nouveau code.";
 
-    // Neutralize any technical backend or provider leakage
-    let cleaned = str
+    const cleaned = str
       .replace(/https?:\/\/[^\s"'<>]*/gi, '')
       .replace(/\b(?:suno|erweima|redpandaai|supabase|postgres|postgresql|database|storage|cloud|bucket|neon|jwt|oauth|api_key|bearer)\b/gi, '')
       .replace(/\s{2,}/g, ' ')
@@ -138,34 +137,37 @@
     return cleaned;
   }
 
-  // Session utilisateur
-  const SESSION_KEY = 'nzembo_auth_user';
+  function buildAuthRedirectUrl(hashSuffix = '') {
+    if (typeof window !== 'undefined' && window.location && /^https?:/i.test(window.location.protocol)) {
+      const p = window.location.pathname || '/';
+      const basePath = p.startsWith('/app') ? '/app' : (p.startsWith('/admin') ? '/admin' : '');
+      return window.location.origin + basePath + hashSuffix;
+    }
+    return 'https://app.nzembo.net' + hashSuffix;
+  }
 
-  // Instance Supabase partagée
   let _supabaseInstance = null;
   let _supabaseInitError = '';
 
   function getSupabase() {
-    if (_supabaseInstance) return _supabaseInstance;
+    if (_supabaseInstance) {
+      _supabaseInitError = '';
+      return _supabaseInstance;
+    }
     if (typeof window !== 'undefined' && window.supabaseClient) {
       _supabaseInstance = window.supabaseClient;
       _supabaseInitError = '';
       return _supabaseInstance;
     }
-
-    const latestEnv = resolveNzemboEnv();
-    SUPABASE_URL = latestEnv.SUPABASE_URL || latestEnv.NEXT_PUBLIC_SUPABASE_URL || SUPABASE_URL || DEFAULT_PUBLIC_SUPABASE_URL;
-    SUPABASE_ANON_KEY = latestEnv.SUPABASE_ANON_KEY || latestEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY || DEFAULT_PUBLIC_SUPABASE_ANON_KEY;
-
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      _supabaseInitError = 'Configuration serveur manquante : URL ou clé Supabase introuvable.';
-      console.warn('[Supabase] Configuration manquante : définissez SUPABASE_URL et SUPABASE_ANON_KEY dans env.local.js ou sur Vercel.');
+    const env = getEnvConfig();
+    if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
+      _supabaseInitError = 'Configuration du service d\'authentification nZembo introuvable.';
       return null;
     }
     if (typeof window !== 'undefined') {
       if (window.supabase && typeof window.supabase.createClient === 'function') {
         try {
-          _supabaseInstance = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+          _supabaseInstance = window.supabase.createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
             auth: {
               persistSession: true,
               autoRefreshToken: true,
@@ -176,25 +178,19 @@
           _supabaseInitError = '';
           return _supabaseInstance;
         } catch (e) {
-          _supabaseInitError = 'Initialisation du client Supabase échouée : ' + (e && e.message ? e.message : 'erreur inconnue');
-          console.warn('[Supabase] Initialisation browser:', e.message);
-          return null;
+          _supabaseInitError = 'Initialisation du module de connexion échouée : ' + (e && e.message ? e.message : 'erreur');
         }
       } else {
-        _supabaseInitError = 'Le module d\'authentification Supabase n\'a pas pu se charger (vérifie ta connexion internet ou réactualise).';
-        return null;
+        _supabaseInitError = "Le module d'authentification nZembo n'a pas pu se charger (vérifie ta connexion internet).";
       }
     }
-    // Environnement Node / Tests
     if (typeof require !== 'undefined') {
       try {
         const { createClient } = require('@supabase/supabase-js');
-        _supabaseInstance = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        _supabaseInstance = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
         _supabaseInitError = '';
         return _supabaseInstance;
-      } catch (e) {
-        _supabaseInitError = 'Client Supabase Node indisponible : ' + (e && e.message ? e.message : 'erreur');
-      }
+      } catch (e) {}
     }
     return null;
   }
@@ -202,12 +198,22 @@
   function getSupabaseOrThrow() {
     const sb = getSupabase();
     if (!sb) {
-      throw new Error(_supabaseInitError || 'Service d\'authentification indisponible : vérifie la configuration Supabase et la connexion internet.');
+      throw new Error(_supabaseInitError || 'Service d\'authentification nZembo indisponible : vérifie ta connexion internet.');
     }
     return sb;
   }
 
-  // Détection dynamique du proxy local (Support Mobile, Émulateur Android et Local PC)
+  async function getAccessToken() {
+    try {
+      const sb = getSupabase();
+      if (!sb || !sb.auth) return '';
+      const { data } = await sb.auth.getSession();
+      return (data && data.session && data.session.access_token) ? data.session.access_token : '';
+    } catch {
+      return '';
+    }
+  }
+
   function getProxyBase() {
     const port = '3001';
     if (typeof window !== 'undefined' && window.location) {
@@ -219,7 +225,6 @@
     return `http://localhost:${port}/api/v1`;
   }
 
-  // Détection de l'hôte pour la persistance locale
   function getStorageBase() {
     const port = '3001';
     if (typeof window !== 'undefined' && window.location) {
@@ -231,50 +236,67 @@
     return `http://localhost:${port}`;
   }
 
-  // Fonction fetch robuste pour le moteur audio IA avec bascule automatique Proxy Local <-> Direct
+  // Fetch moteur audio ultra-résilient :
+  // 1) Proxy backend nZembo (/api/engine/* — zéro CORS, utilise clé serveur)
+  // 2) Proxy local optionnel (:3001) sur HTTP local
+  // 3) Hôtes API audio directs en repli si token client présent
   async function fetchAudioEngine(path, options = {}) {
-    options.headers = options.headers || {};
-    if (ENGINE_BEARER_TOKEN) {
-      options.headers['Authorization'] = `Bearer ${ENGINE_BEARER_TOKEN}`;
-    }
-    if (!options.headers['Content-Type'] && !(options.body instanceof FormData)) {
-      options.headers['Content-Type'] = 'application/json';
+    const env = getEnvConfig();
+    const token = env.ENGINE_BEARER_TOKEN;
+    const baseHeaders = { ...(options.headers || {}) };
+    if (!baseHeaders['Content-Type'] && !(options.body instanceof FormData)) {
+      baseHeaders['Content-Type'] = 'application/json';
     }
 
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    const isBrowserHttp = (typeof window !== 'undefined' && window.location && /^https?:$/i.test(window.location.protocol));
     const isHttpOrigin = (typeof window !== 'undefined' && window.location && window.location.protocol === 'http:');
 
-    // 1. Essai via le proxy local uniquement sur environnement HTTP local (évite Mixed Content en HTTPS)
+    // 1. Proxy Same-Origin nZembo Backend (/api/engine/*)
+    if (isBrowserHttp) {
+      try {
+        const backendBase = getBackendApiBase();
+        const proxyOpts = { ...options, headers: { ...baseHeaders } };
+        if (!proxyOpts.signal && typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+          proxyOpts.signal = AbortSignal.timeout(25000);
+        }
+        const serverRes = await fetch(`${backendBase}/api/engine${cleanPath}`, proxyOpts);
+        if (serverRes.ok || serverRes.status === 400 || serverRes.status === 422 || serverRes.status === 429) {
+          return serverRes;
+        }
+      } catch (e) {}
+    }
+
+    // 2. Relais proxy local sur :3001 (si actif en local HTTP)
     if (isHttpOrigin) {
       try {
-        const proxyBase = getProxyBase();
-        const fetchOpts = { ...options };
-        if (!fetchOpts.signal && typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
-          fetchOpts.signal = AbortSignal.timeout(12000);
+        const localOpts = { ...options, headers: { ...baseHeaders } };
+        if (token) localOpts.headers['Authorization'] = `Bearer ${token}`;
+        if (!localOpts.signal && typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+          localOpts.signal = AbortSignal.timeout(10000);
         }
-        const proxyRes = await fetch(`${proxyBase}${cleanPath}`, fetchOpts);
+        const proxyRes = await fetch(`${getProxyBase()}${cleanPath}`, localOpts);
         if (proxyRes.ok || proxyRes.status === 400 || proxyRes.status === 429) {
           return proxyRes;
         }
-      } catch (e) {
-        // Proxy local temporairement indisponible, bascule directe
-      }
+      } catch (e) {}
     }
 
-    // 2. Essai direct sur l'hôte officiel Suno API avec repli miroir
+    // 3. Repli direct avec clé Bearer si disponible
+    const directHeaders = { ...baseHeaders };
+    if (token) directHeaders['Authorization'] = `Bearer ${token}`;
+    const directOpts = { ...options, headers: directHeaders };
+
     try {
-      const directRes = await fetch(`${DIRECT_ENGINE_BASE}${cleanPath}`, options);
+      const directRes = await fetch(`${DIRECT_ENGINE_BASE}${cleanPath}`, directOpts);
       if (directRes.ok || directRes.status === 400 || directRes.status === 429) {
         return directRes;
       }
     } catch (e) {}
 
-    return await fetch(`https://apibox.erweima.ai/api/v1${cleanPath}`, options);
+    return await fetch(`${MIRROR_ENGINE_BASE}${cleanPath}`, directOpts);
   }
 
-  // ================= VALIDATION DES IDENTIFIANTS MOTEUR IA =================
-  // Les identifiants locaux (placeholders) ne doivent JAMAIS être transmis à l'API distante,
-  // sinon celle-ci répond « 400 Record does not exist ».
   const LOCAL_ID_PREFIXES = ['task_', 'vid_', 'upload_', 'studio_', 'audio_', 'meta_', 'nz_', 'nz-', 'track_', 'temp_', 'local_'];
   function isValidEngineId(id) {
     if (!id || typeof id !== 'string') return false;
@@ -285,7 +307,6 @@
     return /^[a-z0-9-]+$/i.test(v);
   }
 
-  // ================= PAROLES SYNCHRONISÉES (WebVTT interne) =================
   function formatVttTime(sec) {
     const s = Math.max(0, Number(sec) || 0);
     const h = Math.floor(s / 3600);
@@ -325,32 +346,14 @@
     return 'WEBVTT\n\n' + cues.map((c, i) => `${i + 1}\n${formatVttTime(c.start)} --> ${formatVttTime(c.end)}\n${esc(c.text)}`).join('\n\n') + '\n';
   }
 
-  // Normalisation MIME audio universelle (formats téléphone Android/iOS & PC)
   const AUDIO_EXT_MIME_MAP = {
-    '.mp3': 'audio/mpeg',
-    '.mpeg': 'audio/mpeg',
-    '.mpga': 'audio/mpeg',
-    '.mp2': 'audio/mpeg',
-    '.wav': 'audio/wav',
-    '.wave': 'audio/wav',
-    '.m4a': 'audio/mp4',
-    '.m4b': 'audio/mp4',
-    '.m4r': 'audio/mp4',
-    '.aac': 'audio/aac',
-    '.ogg': 'audio/ogg',
-    '.oga': 'audio/ogg',
-    '.opus': 'audio/ogg',
-    '.spx': 'audio/ogg',
-    '.flac': 'audio/flac',
-    '.webm': 'audio/webm',
-    '.amr': 'audio/amr',
-    '.3gp': 'audio/3gpp',
-    '.3gpp': 'audio/3gpp',
-    '.wma': 'audio/x-ms-wma',
-    '.aiff': 'audio/aiff',
-    '.aif': 'audio/aiff',
-    '.caf': 'audio/x-caf',
-    '.mp4': 'audio/mp4'
+    '.mp3': 'audio/mpeg', '.mpeg': 'audio/mpeg', '.mpga': 'audio/mpeg', '.mp2': 'audio/mpeg',
+    '.wav': 'audio/wav', '.wave': 'audio/wav',
+    '.m4a': 'audio/mp4', '.m4b': 'audio/mp4', '.m4r': 'audio/mp4',
+    '.aac': 'audio/aac', '.ogg': 'audio/ogg', '.oga': 'audio/ogg', '.opus': 'audio/ogg', '.spx': 'audio/ogg',
+    '.flac': 'audio/flac', '.webm': 'audio/webm', '.amr': 'audio/amr',
+    '.3gp': 'audio/3gpp', '.3gpp': 'audio/3gpp', '.wma': 'audio/x-ms-wma',
+    '.aiff': 'audio/aiff', '.aif': 'audio/aiff', '.caf': 'audio/x-caf', '.mp4': 'audio/mp4'
   };
 
   function resolveUploadMimeType(fileOrBlob, fileName = 'track.mp3') {
@@ -380,9 +383,7 @@
     let clean = String(fileName || (fileOrBlob && fileOrBlob.name) || 'audio_track').replace(/[^a-zA-Z0-9._-]/g, '_');
     const dotIdx = clean.lastIndexOf('.');
     const ext = dotIdx !== -1 ? clean.slice(dotIdx).toLowerCase() : '';
-    if (ext && AUDIO_EXT_MIME_MAP[ext]) {
-      return clean.slice(0, dotIdx) + ext;
-    }
+    if (ext && AUDIO_EXT_MIME_MAP[ext]) return clean.slice(0, dotIdx) + ext;
     const rawType = (fileOrBlob && fileOrBlob.type) ? String(fileOrBlob.type).split(';')[0].trim().toLowerCase() : '';
     const mimeToExt = {
       'audio/wav': '.wav', 'audio/x-wav': '.wav', 'audio/wave': '.wav',
@@ -394,11 +395,9 @@
       'audio/3gpp': '.3gp', 'audio/amr': '.amr',
       'audio/mpeg': '.mp3', 'audio/mp3': '.mp3'
     };
-    const inferredExt = mimeToExt[rawType] || '.mp3';
-    return (clean || 'audio_track') + inferredExt;
+    return (clean || 'audio_track') + (mimeToExt[rawType] || '.mp3');
   }
 
-  // Encodage PCM 16-bit WAV compact depuis AudioBuffer (conversion universelle côté navigateur)
   function encodeAudioBufferToWavBlob(audioBuffer) {
     const numChannels = 1;
     const sampleRate = audioBuffer.sampleRate;
@@ -406,22 +405,12 @@
     const dataLength = samples.length * 2;
     const buffer = new ArrayBuffer(44 + dataLength);
     const view = new DataView(buffer);
-    const writeStr = (offset, str) => {
-      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
-    };
-    writeStr(0, 'RIFF');
-    view.setUint32(4, 36 + dataLength, true);
-    writeStr(8, 'WAVE');
-    writeStr(12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, numChannels, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * numChannels * 2, true);
-    view.setUint16(32, numChannels * 2, true);
-    view.setUint16(34, 16, true);
-    writeStr(36, 'data');
-    view.setUint32(40, dataLength, true);
+    const writeStr = (offset, str) => { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); };
+    writeStr(0, 'RIFF'); view.setUint32(4, 36 + dataLength, true); writeStr(8, 'WAVE');
+    writeStr(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+    view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * 2, true); view.setUint16(32, numChannels * 2, true);
+    view.setUint16(34, 16, true); writeStr(36, 'data'); view.setUint32(40, dataLength, true);
     let offset = 44;
     for (let i = 0; i < samples.length; i++) {
       const s = Math.max(-1, Math.min(1, samples[i]));
@@ -453,7 +442,6 @@
       const rendered = await offline.startRendering();
       return encodeAudioBufferToWavBlob(rendered);
     } catch (e) {
-      console.warn('[Audio Normalize] Conversion WebAudio ignoree:', e.message);
       return null;
     } finally {
       if (ctx && typeof ctx.close === 'function') {
@@ -483,49 +471,30 @@
     } catch (e) {}
   }
 
-  // ================= SUPABASE STORAGE (BUCKET 'nzembo-media') =================
   async function uploadMediaToSupabase(fileOrBlob, fileName = 'track.mp3', folder = 'audio') {
     const sb = getSupabase();
-    if (!sb) {
-      console.warn('⚠️ [Supabase Storage] Client Supabase non prêt.');
-      return null;
-    }
+    if (!sb) return null;
     try {
       const safeName = (fileName || 'media').replace(/[^a-zA-Z0-9._-]/g, '_');
       const uniquePath = `${folder}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}_${safeName}`;
       const contentType = resolveUploadMimeType(fileOrBlob, safeName);
-
-      console.log(`📤 [Supabase Storage] Envoi vers '${STORAGE_BUCKET}/${uniquePath}' (${contentType})...`);
-
-      const { data, error } = await sb.storage.from(STORAGE_BUCKET).upload(uniquePath, fileOrBlob, {
+      const { error } = await sb.storage.from(STORAGE_BUCKET).upload(uniquePath, fileOrBlob, {
         contentType: contentType,
         upsert: true
       });
-
-      if (error) {
-        console.error('❌ [Supabase Storage] Erreur upload:', error.message);
-        return null;
-      }
-
+      if (error) return null;
       const { data: urlData } = sb.storage.from(STORAGE_BUCKET).getPublicUrl(uniquePath);
-      const publicUrl = urlData ? urlData.publicUrl : null;
-      console.log('✅ [Supabase Storage] Média disponible publiquement:', publicUrl);
-      return publicUrl;
+      return urlData ? urlData.publicUrl : null;
     } catch (err) {
-      console.error('❌ [Supabase Storage] Exception:', err);
       return null;
     }
   }
 
-  // Fonction pour persister automatiquement un média temporaire vers Supabase Storage
   async function persistMediaLocally(remoteUrl, category = 'audio', fileId = '') {
     if (!remoteUrl) return remoteUrl;
-    // Si c'est déjà hébergé sur notre Supabase ou en chemin relatif, ne rien faire
     if (remoteUrl.includes('supabase.co/storage') || remoteUrl.startsWith('/') || remoteUrl.includes('/media/')) {
       return remoteUrl;
     }
-
-    // Essayer de rapatrier et d'uploader vers Supabase Storage
     try {
       const sb = getSupabase();
       if (sb) {
@@ -536,37 +505,13 @@
           const ext = category === 'video' ? 'mp4' : (category === 'image' ? 'jpg' : 'mp3');
           const fileName = `${fileId || ('nz_media_' + Date.now())}.${ext}`;
           const uploadedUrl = await uploadMediaToSupabase(blob, fileName, category === 'video' ? 'videos' : (category === 'image' ? 'covers' : 'audio'));
-          if (uploadedUrl) {
-            console.log(`💾 [Supabase Storage] Média Nzembo sauvegardé durablement sur Supabase: ${uploadedUrl}`);
-            return uploadedUrl;
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('⚠️ Sauvegarde média vers Supabase non aboutie, conservation remoteUrl:', e.message);
-    }
-
-    // Relais proxy local si disponible
-    try {
-      const storageBase = getStorageBase();
-      const res = await fetch(`${storageBase}/api/persist-media`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: remoteUrl, category, id: fileId }),
-        signal: AbortSignal.timeout(8000)
-      });
-      if (res.ok) {
-        const data = await res.json().catch(() => ({}));
-        if (data && data.localUrl) {
-          return `${storageBase}${data.localUrl}`;
+          if (uploadedUrl) return uploadedUrl;
         }
       }
     } catch (e) {}
-
     return remoteUrl;
   }
 
-  // ================= GESTION DES SESSIONS UTILISATEUR =================
   function getPersistedCredits(userId, fallback = null) {
     try {
       if (typeof localStorage !== 'undefined') {
@@ -597,6 +542,39 @@
       }
     } catch (e) {}
     return clean;
+  }
+
+  function getPendingOtp() {
+    try {
+      if (typeof localStorage === 'undefined') return null;
+      const raw = localStorage.getItem(PENDING_OTP_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.email) return null;
+      // Expiration de sécurité 20 min
+      if (parsed.ts && (Date.now() - Number(parsed.ts)) > 20 * 60 * 1000) {
+        localStorage.removeItem(PENDING_OTP_KEY);
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  function setPendingOtp(info) {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      if (info && info.email) {
+        localStorage.setItem(PENDING_OTP_KEY, JSON.stringify({ ...info, ts: Date.now() }));
+      } else {
+        localStorage.removeItem(PENDING_OTP_KEY);
+      }
+    } catch {}
+  }
+
+  function clearPendingOtp() {
+    setPendingOtp(null);
   }
 
   function getCurrentUser() {
@@ -641,34 +619,54 @@
     } catch (e) {}
   }
 
-  // ================= CRUD CRÉATIONS DANS SUPABASE POSTGRESQL =================
-  // Sauvegarder ou mettre à jour une création dans la table public.creations
+  async function syncSongToNeon(creation) {
+    try {
+      if (!creation) return;
+      const u = getCurrentUser();
+      await fetch(`${getBackendApiBase()}/api/songs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: creation.id || creation.taskId,
+          userId: (u && u.id) || creation.userId || '',
+          title: creation.title,
+          style: creation.style,
+          occasion: creation.occasion,
+          recipient: creation.recipient,
+          lyrics: creation.lyrics,
+          audioUrl: creation.audioUrl,
+          videoUrl: creation.videoUrl,
+          coverUrl: creation.coverUrl || creation.albumCover,
+          taskId: creation.taskId,
+          audioId: creation.audioId,
+          toolCategory: creation.toolCategory || 'generation',
+          status: creation.status || (creation.isProcessing ? 'processing' : 'completed')
+        })
+      }).catch(() => {});
+    } catch {}
+  }
+
   async function saveCreation(creation) {
     if (!creation) return null;
+    syncSongToNeon(creation);
     const sb = getSupabase();
-    if (!sb) {
-      console.warn('[Supabase Database] Client non disponible pour saveCreation');
-      return creation;
-    }
+    if (!sb) return creation;
 
     const user = getCurrentUser();
     const creationId = String(creation.id || creation.taskId || ('nz_' + Date.now()));
-    const isProcessing = (creation.isProcessing !== undefined) 
-      ? Boolean(creation.isProcessing) 
+    const isProcessing = (creation.isProcessing !== undefined)
+      ? Boolean(creation.isProcessing)
       : (creation.status === 'IN_PROGRESS' || creation.status === 'en_cours' || creation.status === 'PENDING');
-
-    const statusVal = creation.status 
-      ? creation.status 
-      : (isProcessing ? 'en_cours' : 'termine');
+    const statusVal = creation.status ? creation.status : (isProcessing ? 'en_cours' : 'termine');
 
     const payload = {
       id: creationId,
-      user_id: (user && user.id && user.id.includes('-')) ? user.id : null,
+      user_id: (user && user.id && String(user.id).includes('-')) ? user.id : null,
       task_id: creation.taskId || creationId,
       audio_id: creation.audioId || null,
       audio_id_2: creation.audioId2 || null,
-      title: (creation.title || 'Création Nzembo').slice(0, 150),
-      artist: (creation.artist || 'Nzembo Studio').slice(0, 100),
+      title: (creation.title || 'Création nZembo').slice(0, 150),
+      artist: (creation.artist || 'nZembo').slice(0, 100),
       style: (creation.style || '').slice(0, 200),
       tool_category: creation.toolCategory || 'generation',
       recipient: creation.recipient || null,
@@ -690,22 +688,16 @@
     };
 
     try {
-      const { data, error } = await sb.from('creations').upsert([payload], { onConflict: 'id' }).select();
-      if (error) {
-        console.warn('⚠️ [Supabase Database] Erreur sauvegarde création:', error.message);
-      } else {
-        console.log('💾 [Supabase Database] Création sauvegardée avec succès:', creationId);
-      }
+      const { data } = await sb.from('creations').upsert([payload], { onConflict: 'id' }).select();
       return (data && data[0]) ? data[0] : payload;
     } catch (e) {
-      console.warn('⚠️ [Supabase Database] Exception saveCreation:', e.message);
       return payload;
     }
   }
 
-  // Mettre à jour une création existante par son ID ou taskId
   async function updateCreation(creationId, updates) {
     if (!creationId || !updates) return null;
+    syncSongToNeon({ id: creationId, taskId: updates.taskId || creationId, ...updates });
     const sb = getSupabase();
     if (!sb) return null;
 
@@ -717,14 +709,8 @@
     if (updates.videoUrl !== undefined) mapped.video_url = updates.videoUrl;
     if (updates.vocalUrl !== undefined) mapped.vocal_url = updates.vocalUrl;
     if (updates.instrumentalUrl !== undefined) mapped.instrumental_url = updates.instrumentalUrl;
-    if (updates.coverUrl !== undefined) {
-      mapped.cover_url = updates.coverUrl;
-      mapped.album_cover = updates.coverUrl;
-    }
-    if (updates.albumCover !== undefined) {
-      mapped.album_cover = updates.albumCover;
-      mapped.cover_url = updates.albumCover;
-    }
+    if (updates.coverUrl !== undefined) { mapped.cover_url = updates.coverUrl; mapped.album_cover = updates.coverUrl; }
+    if (updates.albumCover !== undefined) { mapped.album_cover = updates.albumCover; mapped.cover_url = updates.albumCover; }
     if (updates.lyrics !== undefined) mapped.lyrics = updates.lyrics;
     if (updates.title !== undefined) mapped.title = updates.title;
     if (updates.artist !== undefined) mapped.artist = updates.artist;
@@ -736,62 +722,36 @@
     if (updates.metadata !== undefined) mapped.metadata = updates.metadata;
 
     try {
-      const { data, error } = await sb
-        .from('creations')
-        .update(mapped)
-        .or(`id.eq.${creationId},task_id.eq.${creationId}`)
-        .select();
-
-      if (error) {
-        console.warn('⚠️ [Supabase Database] Erreur updateCreation:', error.message);
-      } else {
-        console.log('🔄 [Supabase Database] Création mise à jour:', creationId);
-      }
+      const { data } = await sb.from('creations').update(mapped).or(`id.eq.${creationId},task_id.eq.${creationId}`).select();
       return data;
     } catch (e) {
-      console.warn('⚠️ [Supabase Database] Exception updateCreation:', e.message);
       return null;
     }
   }
 
-  // Récupérer toutes les créations d'un utilisateur (ou créations publiques/locales)
   async function getUserCreations(userId) {
     const sb = getSupabase();
     if (!sb) return [];
-
     try {
       const activeUser = getCurrentUser();
-      const effectiveUserId = (userId && typeof userId === 'string' && userId.includes('-')) 
-        ? userId 
+      const effectiveUserId = (userId && typeof userId === 'string' && userId.includes('-'))
+        ? userId
         : (activeUser && activeUser.id && String(activeUser.id).includes('-') ? activeUser.id : null);
 
       let rows = [];
       if (effectiveUserId) {
-        const { data, error } = await sb
-          .from('creations')
-          .select('*')
+        const { data, error } = await sb.from('creations').select('*')
           .or(`user_id.eq.${effectiveUserId},user_id.is.null`)
           .order('created_at', { ascending: false });
-        if (!error && Array.isArray(data) && data.length > 0) {
-          rows = data;
-        }
+        if (!error && Array.isArray(data) && data.length > 0) rows = data;
       }
 
-      // Repli automatique sans filtre restrictif sur user_id si la requête filtrée ne renvoie rien
       if (!rows || rows.length === 0) {
-        const { data: allData, error: allErr } = await sb
-          .from('creations')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(200);
-        if (allErr) {
-          console.warn('⚠️ [Supabase Database] Erreur lecture créations:', allErr.message);
-          return [];
-        }
+        const { data: allData, error: allErr } = await sb.from('creations').select('*').order('created_at', { ascending: false }).limit(200);
+        if (allErr) return [];
         rows = allData || [];
       }
 
-      // Mapper les enregistrements Supabase vers le format objet JavaScript du frontend Nzembo
       return rows.map(row => {
         const meta = (row.metadata && typeof row.metadata === 'object') ? row.metadata : {};
         const resolvedVideoUrl = row.video_url || meta.videoUrl || meta.video_url || '';
@@ -803,8 +763,8 @@
           taskId: row.task_id || row.id,
           audioId: row.audio_id || row.id,
           audioId2: row.audio_id_2 || '',
-          title: row.title || 'Création Studio',
-          artist: row.artist || 'Nzembo Studio',
+          title: row.title || 'Chanson nZembo',
+          artist: row.artist || 'nZembo',
           style: row.style || '',
           toolCategory: rawCat,
           category: rawCat,
@@ -834,68 +794,111 @@
         };
       });
     } catch (e) {
-      console.warn('⚠️ [Supabase Database] Exception getUserCreations:', e.message);
       return [];
     }
   }
 
-  // Supprimer définitivement une création
   async function deleteCreation(creationId) {
     if (!creationId) return false;
     const sb = getSupabase();
     if (!sb) return false;
-
     try {
       const { error } = await sb.from('creations').delete().or(`id.eq.${creationId},task_id.eq.${creationId}`);
-      if (error) {
-        console.warn('⚠️ [Supabase Database] Erreur deleteCreation:', error.message);
-        return false;
-      }
-      console.log('🗑️ [Supabase Database] Création supprimée:', creationId);
-      return true;
+      return !error;
     } catch (e) {
-      console.warn('⚠️ [Supabase Database] Exception deleteCreation:', e.message);
       return false;
     }
   }
 
-  // ================= API PUBLIQUE NZEMBO BACKEND =================
+  // Suivi des déductions par taskId pour éviter tout double débit ou double remboursement
+  const _taskDeductions = {};
+
   window.NzemboBackend = {
-    // Exposer l'instance et la configuration Supabase
-    supabaseUrl: SUPABASE_URL,
+    supabaseUrl: getEnvConfig().SUPABASE_URL,
     storageBucket: STORAGE_BUCKET,
     getSupabase: getSupabase,
-
-    // Utilitaires Moteur Audio IA
+    getBackendApiBase: getBackendApiBase,
     isValidEngineId: isValidEngineId,
     isValidSunoId: isValidEngineId,
     sanitizeApiMessage: sanitizeApiErrorMessage,
     buildLyricsVtt: buildLyricsVtt,
+    getPendingOtp: getPendingOtp,
+    clearPendingOtp: clearPendingOtp,
+
+    checkEngineHealth: async function() {
+      try {
+        const res = await fetch(`${getBackendApiBase()}/api/engine/health`, { method: 'GET' });
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.connected) return json;
+      } catch {}
+      try {
+        const r = await fetchAudioEngine('/generate/credit', { method: 'GET' });
+        const d = await r.json().catch(() => ({}));
+        return { connected: Boolean(r.ok && d && d.code === 200), credits: d?.data };
+      } catch {
+        return { connected: false };
+      }
+    },
+
+    syncUserWithBackend: async function(userObj, { isNewSignup = false, existingProfileCredits = null } = {}) {
+      if (!userObj || !userObj.id || !userObj.email) return null;
+      try {
+        const token = await getAccessToken();
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch(`${getBackendApiBase()}/api/users/sync`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            id: userObj.id,
+            email: userObj.email,
+            name: userObj.name || '',
+            referral_code: userObj.referral_code || '',
+            referred_by: userObj.referral_code_used || null,
+            isNewSignup: Boolean(isNewSignup),
+            existingProfileCredits: existingProfileCredits !== null ? Number(existingProfileCredits) : undefined
+          })
+        });
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.success && json.user) {
+          return Number(json.credits ?? json.user.credits ?? 0);
+        }
+      } catch (e) {}
+      return null;
+    },
 
     getUserCredits: async function() {
       const user = getCurrentUser();
       const sb = getSupabase();
-      const uid = (user && user.id && String(user.id).includes('-')) ? user.id : null;
-      const localPersisted = getPersistedCredits(uid, null);
+      const uid = (user && user.id) ? String(user.id) : null;
 
-      if (sb && uid) {
+      if (uid) {
+        try {
+          const emailQ = user && user.email ? `?email=${encodeURIComponent(user.email)}` : '';
+          const beRes = await fetch(`${getBackendApiBase()}/api/users/${encodeURIComponent(uid)}/credits${emailQ}`);
+          const beJson = await beRes.json().catch(() => ({}));
+          if (beRes.ok && beJson.success && beJson.credits !== undefined) {
+            const dbCredits = Math.max(0, Number(beJson.credits) || 0);
+            savePersistedCredits(dbCredits, uid);
+            return dbCredits;
+          }
+        } catch {}
+      }
+
+      if (sb && uid && uid.includes('-')) {
         try {
           const { data: profile } = await sb.from('profiles').select('credits').eq('id', uid).maybeSingle();
           if (profile && profile.credits !== undefined && profile.credits !== null) {
             const dbCredits = Math.max(0, Number(profile.credits) || 0);
-            // Si une mise à jour locale a eu lieu mais que la DB renvoie encore l'ancien défaut 3, synchroniser la DB
-            if (localPersisted !== null && localPersisted !== dbCredits && dbCredits === 3) {
-              await sb.from('profiles').update({ credits: localPersisted }).eq('id', uid);
-              return localPersisted;
-            }
-            const resolved = localPersisted !== null ? localPersisted : dbCredits;
-            savePersistedCredits(resolved, uid);
-            return resolved;
+            savePersistedCredits(dbCredits, uid);
+            return dbCredits;
           }
         } catch (e) {}
       }
-      if (localPersisted !== null) return localPersisted;
-      if (user && user.credits !== undefined && !isNaN(Number(user.credits))) return Math.max(0, Number(user.credits));
+      if (user && user.credits !== undefined && !isNaN(Number(user.credits))) {
+        return Math.max(0, Number(user.credits));
+      }
       return 0;
     },
 
@@ -922,11 +925,7 @@
       const sb = getSupabase();
       if (sb && uid && String(uid).includes('-')) {
         try {
-          const { data: updData, error: updErr } = await sb
-            .from('profiles')
-            .update({ credits: val })
-            .eq('id', uid)
-            .select();
+          const { data: updData, error: updErr } = await sb.from('profiles').update({ credits: val }).eq('id', uid).select();
           if (updErr || !updData || updData.length === 0) {
             await sb.from('profiles').upsert([{
               id: uid,
@@ -935,154 +934,296 @@
               credits: val
             }], { onConflict: 'id' });
           }
-        } catch (e) {
-          console.warn('⚠️ [Supabase Database] Erreur mise à jour crédits:', e.message);
-        }
+        } catch (e) {}
       }
       return val;
     },
 
     addCredits: async function(amount = 1) {
       const added = Math.max(0, Number(amount) || 0);
-      const user = getCurrentUser();
-      const uid = (user && user.id) ? user.id : null;
-      let currentCredits = getPersistedCredits(uid, null);
-      if (currentCredits === null) {
-        if (user && user.credits != null && !isNaN(Number(user.credits))) {
-          currentCredits = Number(user.credits);
-        } else if (typeof window !== 'undefined' && window.userCredits != null && !isNaN(Number(window.userCredits))) {
-          currentCredits = Number(window.userCredits);
-        } else {
-          currentCredits = 0;
-        }
-      }
-      const newCredits = Math.max(0, currentCredits + added);
-      return await this.setUserCredits(newCredits);
+      const current = await this.getUserCredits();
+      return await this.setUserCredits(Math.max(0, current + added));
     },
 
-    deductCredits: async function(amount = 1, reason = 'Action') {
-      const cost = Math.max(0, Number(amount) || 1);
-      const user = getCurrentUser();
-      const uid = (user && user.id) ? user.id : null;
-      let currentCredits = getPersistedCredits(uid, null);
-      if (currentCredits === null) {
-        if (user && user.credits != null && !isNaN(Number(user.credits))) {
-          currentCredits = Number(user.credits);
-        } else if (typeof window !== 'undefined' && window.userCredits != null && !isNaN(Number(window.userCredits))) {
-          currentCredits = Number(window.userCredits);
-        } else {
-          currentCredits = 0;
-        }
+    deductCredits: async function(amount = 1, reason = 'Action studio', taskId = '') {
+      const cost = Math.max(0, parseInt(amount, 10) || 1);
+      if (taskId && _taskDeductions[taskId]) {
+        return await this.getUserCredits();
       }
-      const newCredits = Math.max(0, currentCredits - cost);
-      await this.setUserCredits(newCredits);
-      return newCredits;
+      if (cost === 0) return await this.getUserCredits();
+
+      const user = getCurrentUser();
+      const uid = (user && user.id) ? String(user.id) : '';
+      const email = (user && user.email) ? String(user.email) : '';
+      const token = await getAccessToken();
+
+      // Déduction autoritaire côté serveur PostgreSQL (bloque à 402 si solde insuffisant)
+      let backendHandled = false;
+      try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch(`${getBackendApiBase()}/api/credits/deduct`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            userId: uid,
+            email: email,
+            name: user ? user.name : '',
+            amount: cost,
+            reason: reason,
+            fallbackCredits: user ? Number(user.credits || 0) : 0
+          })
+        });
+        const json = await res.json().catch(() => ({}));
+        if (res.status === 402 || json.insufficient) {
+          await this.setUserCredits(json.credits ?? 0);
+          throw new Error(json.error || `Solde insuffisant (${cost} crédit${cost > 1 ? 's' : ''} requis).`);
+        }
+        if (res.ok && json.success) {
+          backendHandled = true;
+          if (taskId) _taskDeductions[taskId] = cost;
+          return await this.setUserCredits(json.credits);
+        }
+      } catch (err) {
+        if (/Solde insuffisant/i.test(err.message)) throw err;
+      }
+
+      if (!backendHandled) {
+        const currentCredits = await this.getUserCredits();
+        if (currentCredits < cost) {
+          throw new Error(`Solde insuffisant (${currentCredits} disponible, ${cost} requis).`);
+        }
+        const nextCredits = Math.max(0, currentCredits - cost);
+        if (taskId) _taskDeductions[taskId] = cost;
+        return await this.setUserCredits(nextCredits);
+      }
     },
 
-    // CRUD Créations
+    // ================= CRÉATIONS =================
     saveCreation: saveCreation,
     updateCreation: updateCreation,
     getUserCreations: getUserCreations,
-    getUserSongs: getUserCreations, // Rétrocompatibilité nom historique
+    getUserSongs: getUserCreations,
     deleteCreation: deleteCreation,
-
-    // Storage Supabase
     uploadMediaToSupabase: uploadMediaToSupabase,
 
-    // 1. Authentification Native Supabase (Email / Password & Google OAuth)
+    // ================= AUTHENTIFICATION & OTP E-MAIL =================
     signInWithGoogle: async function() {
       const sb = getSupabaseOrThrow();
+      clearPendingOtp();
       const redirectUrl = buildAuthRedirectUrl();
-
       let data, error;
       try {
         ({ data, error } = await sb.auth.signInWithOAuth({
           provider: 'google',
-          options: {
-            redirectTo: redirectUrl
-          }
+          options: { redirectTo: redirectUrl }
         }));
       } catch (netErr) {
-        throw new Error(formatAuthError(netErr, 'Erreur réseau lors de la redirection vers Google.'));
+        throw new Error(formatAuthError(netErr, 'Erreur réseau lors de la connexion Google.'));
       }
-      if (error) {
-        throw new Error(formatAuthError(error, 'Impossible de démarrer la connexion avec Google.'));
-      }
-      if (!data || !data.url) {
-        throw new Error("Le serveur d'authentification n'a renvoyé aucune URL de redirection Google.");
-      }
+      if (error) throw new Error(formatAuthError(error, 'Impossible de démarrer la connexion Google.'));
+      if (!data || !data.url) throw new Error("Aucune URL de redirection Google reçue.");
       return data;
+    },
+
+    sendEmailOtp: async function(email, purpose = 'auth', userName = '') {
+      email = (email || '').trim().toLowerCase();
+      if (!email || !email.includes('@')) throw new Error('Renseigne une adresse e-mail valide.');
+
+      // 1. Si un expéditeur e-mail nZembo (ex: Resend) est configuré côté serveur, l'utiliser en priorité
+      try {
+        const srvRes = await fetch(`${getBackendApiBase()}/api/auth/otp/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, purpose, userName })
+        });
+        const srvJson = await srvRes.json().catch(() => ({}));
+        if (srvRes.ok && srvJson.success && srvJson.sent && !srvJson.useSupabaseOtp) {
+          return { success: true, otpMode: 'server_otp', otpType: purpose };
+        }
+      } catch {}
+
+      // 2. Envoi OTP natif par e-mail via le serveur d'authentification
+      const sb = getSupabaseOrThrow();
+      if (purpose === 'signup_unconfirmed') {
+        const { error } = await sb.auth.resend({ type: 'signup', email });
+        if (error) throw new Error(formatAuthError(error, "Impossible d'envoyer le code par e-mail."));
+        return { success: true, otpMode: 'supabase_otp', otpType: 'signup' };
+      }
+
+      const { error } = await sb.auth.signInWithOtp({
+        email,
+        options: { shouldCreateUser: false }
+      });
+      if (error) {
+        throw new Error(formatAuthError(error, "Impossible d'envoyer le code de validation par e-mail."));
+      }
+      return { success: true, otpMode: 'supabase_otp', otpType: 'email' };
+    },
+
+    verifyEmailOtp: async function({ email, code, purpose = 'auth', otpMode = 'supabase_otp', otpType = 'email', expectedUser = null }) {
+      email = (email || '').trim().toLowerCase();
+      const token = String(code || '').replace(/\s+/g, '').trim();
+      if (!email || !token || token.length < 4) {
+        throw new Error('Entre le code de validation reçu par e-mail.');
+      }
+
+      const sb = getSupabaseOrThrow();
+      let authUser = null;
+
+      if (otpMode === 'server_otp') {
+        const vRes = await fetch(`${getBackendApiBase()}/api/auth/otp/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, purpose, code: token })
+        });
+        const vJson = await vRes.json().catch(() => ({}));
+        if (!vRes.ok || !vJson.success) {
+          throw new Error(vJson.error || 'Code de validation invalide ou expiré.');
+        }
+        const { data: uData } = await sb.auth.getUser();
+        authUser = uData && uData.user;
+      } else {
+        const typesToTry = otpType === 'signup' ? ['signup', 'email'] : ['email', 'signup'];
+        let verifyError = null;
+        let verifyData = null;
+
+        for (const t of typesToTry) {
+          const res = await sb.auth.verifyOtp({ email, token, type: t });
+          if (!res.error && res.data && (res.data.user || res.data.session)) {
+            verifyData = res.data;
+            verifyError = null;
+            break;
+          }
+          verifyError = res.error;
+        }
+        if (verifyError) {
+          throw new Error(formatAuthError(verifyError, 'Code de validation incorrect ou expiré.'));
+        }
+        authUser = (verifyData && verifyData.user) || null;
+      }
+
+      clearPendingOtp();
+
+      // Récupérer l'utilisateur complet et hydrater profil + crédits exacts (0 à l'inscription)
+      if (!authUser) {
+        const { data: uData } = await sb.auth.getUser();
+        authUser = uData && uData.user;
+      }
+      if (!authUser && expectedUser) {
+        authUser = expectedUser;
+      }
+      if (!authUser) {
+        throw new Error("Validation réussie, mais la session n'a pas pu être ouverte. Reconnecte-toi.");
+      }
+
+      const isRegister = (purpose === 'register' || purpose === 'signup_unconfirmed');
+      let profile = null;
+      try {
+        const { data: pData } = await sb.from('profiles').select('*').eq('id', authUser.id).maybeSingle();
+        profile = pData;
+        if (!profile || isRegister) {
+          const fallbackName = (expectedUser && expectedUser.name) || authUser.user_metadata?.full_name || authUser.user_metadata?.name || email.split('@')[0];
+          const fallbackRef = (expectedUser && expectedUser.referral_code) || authUser.user_metadata?.referral_code || ('NZ-' + authUser.id.substring(0, 5).toUpperCase());
+          const targetCredits = (!profile) ? 0 : Math.max(0, Number(profile.credits) || 0);
+          const { data: ups } = await sb.from('profiles').upsert([{
+            id: authUser.id,
+            email: authUser.email,
+            name: (profile && profile.name) || fallbackName,
+            credits: isRegister && !profile ? 0 : targetCredits,
+            referral_code: (profile && profile.referral_code) || fallbackRef
+          }], { onConflict: 'id' }).select().maybeSingle();
+          if (ups) profile = ups;
+        }
+      } catch {}
+
+      const fallbackName = authUser.user_metadata?.full_name || authUser.user_metadata?.name || (expectedUser && expectedUser.name) || email.split('@')[0];
+      const fallbackRef = (profile && profile.referral_code) || authUser.user_metadata?.referral_code || ('NZ-' + authUser.id.substring(0, 5).toUpperCase());
+      const userObj = {
+        id: authUser.id,
+        email: authUser.email,
+        name: (profile && profile.name) || fallbackName,
+        credits: (profile && profile.credits !== undefined && profile.credits !== null) ? Math.max(0, Number(profile.credits)) : 0,
+        avatar_url: (profile && profile.avatar_url) || getSavedAvatarForUser(authUser.id) || authUser.user_metadata?.avatar_url || null,
+        referral_code: fallbackRef,
+        referral_code_used: authUser.user_metadata?.referral_code_used || null
+      };
+
+      const syncedCredits = await this.syncUserWithBackend(userObj, {
+        isNewSignup: isRegister && !profile,
+        existingProfileCredits: userObj.credits
+      });
+      if (syncedCredits !== null) {
+        userObj.credits = syncedCredits;
+        savePersistedCredits(syncedCredits, userObj.id);
+      }
+
+      setCurrentUser(userObj);
+      return userObj;
     },
 
     login: async function(email, password) {
       email = (email || '').trim().toLowerCase();
       password = (password || '').trim();
-      if (!email) throw new Error('Veuillez renseigner votre e-mail.');
-      if (!password) throw new Error('Veuillez renseigner votre mot de passe.');
+      if (!email) throw new Error('Renseigne ton adresse e-mail.');
+      if (!password) throw new Error('Renseigne ton mot de passe.');
 
       const sb = getSupabaseOrThrow();
-
       let data, error;
       try {
-        ({ data, error } = await sb.auth.signInWithPassword({
-          email: email,
-          password: password
-        }));
+        ({ data, error } = await sb.auth.signInWithPassword({ email, password }));
       } catch (netErr) {
         throw new Error(formatAuthError(netErr, 'Impossible de joindre le serveur de connexion.'));
       }
 
       if (error) {
         if (/Email not confirmed/i.test(error.message)) {
-          const unconfErr = new Error("E-mail non confirmé : clique d'abord sur le lien reçu dans ta boîte mail.");
-          unconfErr.isUnconfirmedEmail = true;
-          unconfErr.email = email;
-          throw unconfErr;
+          await this.sendEmailOtp(email, 'signup_unconfirmed').catch(() => {});
+          setPendingOtp({ email, mode: 'register', otpType: 'signup', otpMode: 'supabase_otp' });
+          return {
+            needsOtpVerification: true,
+            needsConfirmation: true,
+            email,
+            purpose: 'signup_unconfirmed',
+            otpMode: 'supabase_otp',
+            otpType: 'signup'
+          };
         }
         throw new Error(formatAuthError(error, 'E-mail ou mot de passe incorrect.'));
       }
 
       const authUser = data && data.user;
-      if (!authUser) throw new Error("Le serveur n'a renvoyé aucune session utilisateur.");
+      if (!authUser) throw new Error("Aucune session utilisateur retournée.");
 
-      let profile = null;
-      const fallbackName = authUser.user_metadata?.full_name || authUser.user_metadata?.name || email.split('@')[0];
-      const fallbackRef = authUser.user_metadata?.referral_code || ('NZ-' + authUser.id.substring(0, 5).toUpperCase());
+      // Étape OTP obligatoire après vérification du mot de passe
+      let otpSendRes = { otpMode: 'supabase_otp', otpType: 'email' };
+      let rateLimited = false;
       try {
-        const { data: pData } = await sb.from('profiles').select('*').eq('id', authUser.id).maybeSingle();
-        profile = pData;
-        if (!profile) {
-          const { data: insData } = await sb.from('profiles').upsert([{
-            id: authUser.id,
-            email: authUser.email,
-            name: fallbackName,
-            credits: 3,
-            referral_code: fallbackRef
-          }], { onConflict: 'id' }).select().maybeSingle();
-          profile = insData;
+        otpSendRes = await this.sendEmailOtp(email, 'login', authUser.user_metadata?.full_name || '');
+      } catch (otpErr) {
+        if (/Patiente|Trop de tentatives/i.test(otpErr.message)) {
+          rateLimited = true;
+        } else {
+          throw otpErr;
         }
-      } catch (pe) {
-        console.warn('[Supabase Profile] Lecture/création différée:', pe && pe.message);
       }
 
-      const persistedLoginCredits = getPersistedCredits(authUser.id, null);
-      const dbLoginCredits = (profile && profile.credits !== undefined && profile.credits !== null) ? Number(profile.credits) : 3;
-      const resolvedLoginCredits = (persistedLoginCredits !== null && (dbLoginCredits === 3 || !profile))
-        ? persistedLoginCredits
-        : dbLoginCredits;
-      savePersistedCredits(resolvedLoginCredits, authUser.id);
-
-      const user = {
-        id: authUser.id,
-        email: authUser.email,
-        name: (profile && profile.name) ? profile.name : fallbackName,
-        avatar_url: (profile && profile.avatar_url) || getSavedAvatarForUser(authUser.id) || authUser.user_metadata?.avatar_url || authUser.user_metadata?.picture || null,
-        credits: resolvedLoginCredits,
-        referral_code: (profile && profile.referral_code) ? profile.referral_code : fallbackRef
+      const pendingPayload = {
+        email,
+        uid: authUser.id,
+        mode: 'login',
+        purpose: 'login',
+        otpMode: otpSendRes.otpMode || 'supabase_otp',
+        otpType: otpSendRes.otpType || 'email',
+        rateLimited
       };
+      setPendingOtp(pendingPayload);
 
-      setCurrentUser(user);
-      return user;
+      return {
+        needsOtpVerification: true,
+        ...pendingPayload
+      };
     },
 
     register: async function(name, email, password, referralCodeUsed = '') {
@@ -1090,26 +1231,24 @@
       email = (email || '').trim().toLowerCase();
       password = (password || '').trim();
 
-      if (!name) throw new Error('Veuillez renseigner votre nom complet.');
-      if (!email || !email.includes('@')) throw new Error('Veuillez renseigner une adresse e-mail valide.');
+      if (!name) throw new Error('Renseigne ton nom complet.');
+      if (!email || !email.includes('@')) throw new Error('Renseigne une adresse e-mail valide.');
       if (!password || password.length < 6) throw new Error('Le mot de passe doit comporter au moins 6 caractères.');
 
       const sb = getSupabaseOrThrow();
-
       const generatedRefCode = 'NZ-' + Math.floor(10000 + Math.random() * 90000);
       const redirectUrl = buildAuthRedirectUrl('/#confirmed');
 
       let data, error;
       try {
         ({ data, error } = await sb.auth.signUp({
-          email: email,
-          password: password,
+          email,
+          password,
           options: {
             emailRedirectTo: redirectUrl,
             data: {
-              name: name,
+              name,
               full_name: name,
-              credits: 3,
               referral_code: generatedRefCode,
               referral_code_used: referralCodeUsed || null
             }
@@ -1124,97 +1263,92 @@
       }
 
       const authUser = data && data.user;
-      if (!authUser) throw new Error("Échec de la création du compte : réponse serveur vide.");
+      if (!authUser) throw new Error("Échec de la création du compte : réponse vide.");
       if (Array.isArray(authUser.identities) && authUser.identities.length === 0) {
         throw new Error('Un compte existe déjà avec cette adresse e-mail. Connecte-toi.');
       }
 
-      // Si confirmation d'email requise (pas de session active immédiate)
-      const needsConfirmation = !data.session;
-
-      let profile = null;
+      // Initialisation STRICTEMENT À 0 CRÉDIT dès l'inscription (override tout trigger éventuel)
       try {
-        const { data: pData } = await sb.from('profiles').select('*').eq('id', authUser.id).maybeSingle();
-        profile = pData;
-        if (!profile) {
-          const { data: insData, error: insErr } = await sb.from('profiles').upsert([{
-            id: authUser.id,
-            email: authUser.email,
-            name: name,
-            credits: 3,
-            referral_code: generatedRefCode
-          }], { onConflict: 'id' }).select().maybeSingle();
-          if (insErr) {
-            console.warn('[Supabase Profile SignUp] Enregistrement différé (RLS/Confirmation):', insErr.message);
-          } else {
-            profile = insData;
-          }
-        }
-      } catch (pe) {
-        console.warn('[Supabase Profile SignUp] Exception:', pe && pe.message);
-      }
+        await sb.from('profiles').upsert([{
+          id: authUser.id,
+          email: authUser.email,
+          name: name,
+          credits: 0,
+          referral_code: generatedRefCode
+        }], { onConflict: 'id' });
+      } catch {}
 
-      const initialCredits = (profile && profile.credits !== undefined && profile.credits !== null)
-        ? Number(profile.credits)
-        : 3;
-
-      const user = {
+      await this.syncUserWithBackend({
         id: authUser.id,
         email: authUser.email,
-        name: (profile && profile.name) || name,
-        credits: initialCredits,
-        referral_code: (profile && profile.referral_code) ? profile.referral_code : generatedRefCode,
-        needsConfirmation: needsConfirmation
-      };
+        name: name,
+        referral_code: generatedRefCode,
+        referral_code_used: referralCodeUsed || null
+      }, { isNewSignup: true });
 
-      if (!needsConfirmation) {
-        setCurrentUser(user);
+      // Si signUp a déjà créé une session (autoconfirm = true), envoyer un code OTP 6 chiffres explicite
+      // Sinon signUp vient déjà d'envoyer le code de confirmation de type 'signup'
+      let otpMode = 'supabase_otp';
+      let otpType = 'signup';
+      let rateLimited = false;
+
+      if (data.session) {
+        try {
+          const otpRes = await this.sendEmailOtp(email, 'register', name);
+          otpMode = otpRes.otpMode || 'supabase_otp';
+          otpType = otpRes.otpType || 'email';
+        } catch (otpErr) {
+          if (/Patiente|Trop de tentatives/i.test(otpErr.message)) {
+            rateLimited = true;
+            otpType = 'email';
+          } else {
+            throw otpErr;
+          }
+        }
       }
-      return user;
+
+      const pendingPayload = {
+        email: authUser.email,
+        uid: authUser.id,
+        name: name,
+        referral_code: generatedRefCode,
+        mode: 'register',
+        purpose: 'register',
+        otpMode,
+        otpType,
+        rateLimited
+      };
+      setPendingOtp(pendingPayload);
+
+      return {
+        id: authUser.id,
+        email: authUser.email,
+        name: name,
+        credits: 0,
+        referral_code: generatedRefCode,
+        needsConfirmation: true,
+        needsOtpVerification: true,
+        ...pendingPayload
+      };
     },
 
     resendConfirmationEmail: async function(email) {
-      email = (email || '').trim().toLowerCase();
-      if (!email || !email.includes('@')) throw new Error('Veuillez renseigner une adresse e-mail valide.');
-      const sb = getSupabaseOrThrow();
-
-      const redirectUrl = buildAuthRedirectUrl('/#confirmed');
-
-      let error;
-      try {
-        ({ error } = await sb.auth.resend({
-          type: 'signup',
-          email: email,
-          options: {
-            emailRedirectTo: redirectUrl
-          }
-        }));
-      } catch (netErr) {
-        throw new Error(formatAuthError(netErr, "Problème réseau lors de l'envoi de l'e-mail de confirmation."));
-      }
-      if (error) {
-        throw new Error(formatAuthError(error, "Impossible d'envoyer l'e-mail de confirmation pour le moment."));
-      }
-      return { success: true };
+      const pending = getPendingOtp();
+      const purpose = (pending && pending.otpType === 'signup') ? 'signup_unconfirmed' : ((pending && pending.purpose) || 'auth');
+      return await this.sendEmailOtp(email, purpose, (pending && pending.name) || '');
     },
 
     requestPasswordReset: async function(email) {
       email = (email || '').trim().toLowerCase();
-      if (!email || !email.includes('@')) throw new Error('Veuillez renseigner une adresse e-mail valide.');
+      if (!email || !email.includes('@')) throw new Error('Renseigne une adresse e-mail valide.');
       const sb = getSupabaseOrThrow();
-
       const redirectUrl = buildAuthRedirectUrl('/#reset-password');
-
-      let error;
-      try {
-        ({ error } = await sb.auth.resetPasswordForEmail(email, {
-          redirectTo: redirectUrl
-        }));
-      } catch (netErr) {
-        throw new Error(formatAuthError(netErr, "Erreur réseau lors de la demande de réinitialisation."));
-      }
+      const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: redirectUrl });
       if (error) {
-        throw new Error(formatAuthError(error, "Impossible d'envoyer l'e-mail de réinitialisation."));
+        if (/security purposes|rate limit/i.test(error.message)) {
+          throw new Error('Trop de tentatives, réessaie dans quelques minutes.');
+        }
       }
       return { success: true };
     },
@@ -1225,24 +1359,14 @@
         throw new Error('Le mot de passe doit comporter au moins 6 caractères.');
       }
       const sb = getSupabaseOrThrow();
-
-      let data, error;
-      try {
-        ({ data, error } = await sb.auth.updateUser({
-          password: newPassword
-        }));
-      } catch (netErr) {
-        throw new Error(formatAuthError(netErr, 'Erreur réseau lors de la mise à jour du mot de passe.'));
-      }
+      const { data, error } = await sb.auth.updateUser({ password: newPassword });
       if (error) {
         if (/same password/i.test(error.message)) {
           throw new Error('Choisis un mot de passe différent du précédent.');
         }
-        throw new Error(formatAuthError(error, 'Impossible de mettre à jour le mot de passe.'));
+        throw new Error(formatAuthError(error, 'Impossible de mettre à jour le mot de passe, réessaie.'));
       }
-      if (data && data.user) {
-        await this.refreshUserData();
-      }
+      if (data && data.user) await this.refreshUserData();
       return { success: true };
     },
 
@@ -1253,59 +1377,38 @@
       try {
         const searchParams = new URLSearchParams(window.location.search);
         const hashStr = window.location.hash || '';
-        const hashParams = new URLSearchParams(hashStr.startsWith('#') ? hashStr.slice(1) : hashStr);
 
-        // Erreur OAuth dans l'URL
-        const oauthError = searchParams.get('error') || hashParams.get('error');
-        const oauthErrorDesc = searchParams.get('error_description') || hashParams.get('error_description');
-        if (oauthError || oauthErrorDesc) {
+        if (searchParams.get('error') || hashStr.includes('error=')) {
           window.history.replaceState({}, document.title, window.location.pathname);
-          return { error: formatAuthError(oauthErrorDesc || oauthError, 'Connexion avec Google annulée ou refusée.') };
+          return { error: 'Connexion annulée ou non autorisée.' };
         }
 
-        // Code PKCE
         const code = searchParams.get('code');
-        if (code) {
-          let exchangeUser = null;
-          let exchangeErr = null;
-          if (typeof sb.auth.exchangeCodeForSession === 'function') {
-            const { data, error } = await sb.auth.exchangeCodeForSession(code);
-            if (!error && data && data.user) exchangeUser = data.user;
-            else exchangeErr = error;
-          }
-          if (!exchangeUser) {
-            // Vérifier si detectSessionInUrl a déjà consommé le code automatiquement
-            const { data: sessFallback } = await sb.auth.getSession();
-            if (sessFallback && sessFallback.session && sessFallback.session.user) {
-              exchangeUser = sessFallback.session.user;
-              exchangeErr = null;
-            }
-          }
+        if (code && typeof sb.auth.exchangeCodeForSession === 'function') {
+          const { data, error } = await sb.auth.exchangeCodeForSession(code);
           window.history.replaceState({}, document.title, window.location.pathname);
-          if (exchangeUser) {
+          if (error) return { error: formatAuthError(error, 'Erreur lors de la validation de session.') };
+          if (data && data.user) {
+            clearPendingOtp();
             return await this.refreshUserData();
           }
-          if (exchangeErr) {
-            return { error: formatAuthError(exchangeErr, 'Échec de validation de la session Google.') };
-          }
         }
 
-        // Token Hash (Implicit OAuth / Magic link)
         if (hashStr.includes('access_token=') || hashStr.includes('refresh_token=')) {
-          const { data: sessData } = await sb.auth.getSession();
+          const { data: sessData, error: sessErr } = await sb.auth.getSession();
+          if (sessErr) return { error: formatAuthError(sessErr, 'Session invalide ou expirée.') };
           if (sessData && sessData.session && sessData.session.user) {
             window.history.replaceState({}, document.title, window.location.pathname);
+            clearPendingOtp();
             return await this.refreshUserData();
           }
         }
-      } catch (e) {
-        console.warn('Session exchange notice:', e);
-        return { error: formatAuthError(e, 'Erreur lors du retour de connexion.') };
-      }
+      } catch (e) {}
       return null;
     },
 
     logout: async function() {
+      clearPendingOtp();
       const sb = getSupabase();
       if (sb) {
         try { await sb.auth.signOut(); } catch (e) {}
@@ -1316,127 +1419,172 @@
     getCurrentUser: getCurrentUser,
 
     refreshUserData: async function() {
+      const pending = getPendingOtp();
+      if (pending) {
+        return null; // Tant que le code OTP e-mail n'est pas saisi, garder la porte verrouillée
+      }
       const sb = getSupabase();
       if (!sb) return getCurrentUser();
 
       try {
         let current = getCurrentUser();
         let authUser = null;
-        if (!current) {
+        try {
           const { data: uData } = await sb.auth.getUser();
-          if (uData && uData.user) {
-            authUser = uData.user;
-          }
-        } else {
-          // Vérifier aussi avec getUser pour récupérer les métadonnées fraîches de Google OAuth
-          try {
-            const { data: uData } = await sb.auth.getUser();
-            if (uData && uData.user) authUser = uData.user;
-          } catch (e) {}
-        }
+          if (uData && uData.user) authUser = uData.user;
+        } catch {}
 
-        const userId = current ? current.id : (authUser ? authUser.id : null);
+        const userId = authUser ? authUser.id : (current ? current.id : null);
         if (!userId) return null;
 
         let { data: profile } = await sb.from('profiles').select('*').eq('id', userId).maybeSingle();
-        const localPersisted = getPersistedCredits(userId, null);
         if (!profile && authUser) {
-          const generatedRef = authUser.user_metadata?.referral_code || ('NZ-' + Math.floor(10000 + Math.random() * 90000));
+          const generatedRef = authUser.user_metadata?.referral_code || ('NZ-' + authUser.id.substring(0, 5).toUpperCase());
           const userName = authUser.user_metadata?.full_name || authUser.user_metadata?.name || (authUser.email ? authUser.email.split('@')[0] : 'Artiste');
-          const avatarUrl = authUser.user_metadata?.avatar_url || authUser.user_metadata?.picture || null;
-          const initialCredits = localPersisted !== null ? localPersisted : 3;
           const { data: insData } = await sb.from('profiles').upsert([{
             id: authUser.id,
             email: authUser.email,
             name: userName,
-            avatar_url: avatarUrl,
-            credits: initialCredits,
+            credits: 0,
             referral_code: generatedRef
           }], { onConflict: 'id' }).select().maybeSingle();
           profile = insData;
         }
 
-        if (profile) {
-          const googleName = authUser?.user_metadata?.full_name || authUser?.user_metadata?.name;
-          const googleGivenName = authUser?.user_metadata?.given_name;
-          const savedLocalAvatar = getSavedAvatarForUser(userId);
-          const avatarUrl = savedLocalAvatar || profile.avatar_url || authUser?.user_metadata?.avatar_url || authUser?.user_metadata?.picture || null;
-          const resolvedName = profile.name || googleName || (current ? current.name : 'Artiste');
+        const resolvedName = (profile && profile.name) || authUser?.user_metadata?.full_name || authUser?.user_metadata?.name || (current ? current.name : 'Artiste');
+        let firstName = '';
+        if (profile && profile.first_name) firstName = profile.first_name;
+        else if (authUser?.user_metadata?.given_name) firstName = authUser.user_metadata.given_name;
+        else if (resolvedName) {
+          const parts = resolvedName.trim().split(/\s+/);
+          if (parts[0] && parts[0].length >= 2) firstName = parts[0];
+        } else if (authUser?.email) firstName = authUser.email.split('@')[0];
+        if (firstName) firstName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
 
-          let firstName = '';
-          if (profile.first_name) {
-            firstName = profile.first_name;
-          } else if (googleGivenName) {
-            firstName = googleGivenName;
-          } else if (resolvedName) {
-            const parts = resolvedName.trim().split(/\s+/);
-            if (parts.length > 0 && parts[0].length >= 2) firstName = parts[0];
-          } else if (authUser?.email) {
-            firstName = authUser.email.split('@')[0];
+        const avatarUrl = getSavedAvatarForUser(userId) || (profile && profile.avatar_url) || authUser?.user_metadata?.avatar_url || authUser?.user_metadata?.picture || null;
+        const dbSbCredits = (profile && profile.credits !== undefined && profile.credits !== null) ? Math.max(0, Number(profile.credits) || 0) : 0;
+
+        const baseUser = {
+          id: userId,
+          email: (profile && profile.email) || (authUser ? authUser.email : (current ? current.email : '')),
+          name: resolvedName,
+          first_name: firstName,
+          avatar_url: avatarUrl,
+          credits: dbSbCredits,
+          referral_code: (profile && profile.referral_code) || authUser?.user_metadata?.referral_code || ('NZ-' + String(userId).slice(0, 5).toUpperCase()),
+          referral_code_used: authUser?.user_metadata?.referral_code_used || null
+        };
+
+        const syncedNeonCredits = await this.syncUserWithBackend(baseUser, {
+          isNewSignup: false,
+          existingProfileCredits: dbSbCredits
+        });
+
+        let finalCredits = dbSbCredits;
+        if (syncedNeonCredits !== null) {
+          finalCredits = syncedNeonCredits;
+          // Si le backend Neon vient d'être crédité via SasPay ou Admin, aligner Supabase profiles
+          if (syncedNeonCredits !== dbSbCredits && sb && String(userId).includes('-')) {
+            sb.from('profiles').update({ credits: syncedNeonCredits }).eq('id', userId).then(() => {}).catch(() => {});
           }
-
-          if (firstName) {
-            firstName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
-          }
-
-          const dbCredits = (profile.credits !== undefined && profile.credits !== null) ? Number(profile.credits) : 0;
-          let resolvedCredits = dbCredits;
-          // Si le solde a été modifié par achat/consommation mais que la DB renvoie encore le défaut 3 (ex: RLS), conserver le vrai solde et resynchroniser
-          if (localPersisted !== null && localPersisted !== dbCredits) {
-            resolvedCredits = localPersisted;
-          }
-          savePersistedCredits(resolvedCredits, userId);
-
-          if (profile && ((!profile.first_name && firstName) || (!profile.avatar_url && avatarUrl) || (resolvedCredits !== dbCredits))) {
-            const updates = {};
-            if (!profile.first_name && firstName) updates.first_name = firstName;
-            if (!profile.avatar_url && avatarUrl) updates.avatar_url = avatarUrl;
-            if (resolvedCredits !== dbCredits) updates.credits = resolvedCredits;
-            sb.from('profiles').update(updates).eq('id', userId).then(() => {}).catch(() => {});
-          }
-
-          const fresh = {
-            id: userId,
-            email: profile.email || (authUser ? authUser.email : (current ? current.email : '')),
-            name: resolvedName,
-            first_name: firstName,
-            avatar_url: avatarUrl,
-            credits: resolvedCredits,
-            referral_code: profile.referral_code || 'NZ-00000'
-          };
-          setCurrentUser(fresh);
-          return fresh;
         }
-        if (current) {
-          if (localPersisted !== null) {
-            current.credits = localPersisted;
-            setCurrentUser(current);
-          }
-          return current;
-        }
+        baseUser.credits = Math.max(0, finalCredits);
+        savePersistedCredits(baseUser.credits, userId);
+        setCurrentUser(baseUser);
+        return baseUser;
       } catch (e) {
-        console.warn('Rafraîchissement profil:', e.message);
+        return getCurrentUser();
       }
-      return getCurrentUser();
     },
 
-    // Consultation des crédits moteur audio restants
+    // ================= PROMOS, NOTIFICATIONS & ANALYTICS =================
+    validatePromoCode: async function(code, credits = 1, currency = 'USD') {
+      const clean = String(code || '').trim().toUpperCase();
+      if (!clean) throw new Error('Entre un code promo.');
+      const res = await fetch(`${getBackendApiBase()}/api/promos/validate?code=${encodeURIComponent(clean)}&credits=${encodeURIComponent(credits)}&currency=${encodeURIComponent(currency)}`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.valid) {
+        throw new Error(json.error || `Code promo « ${clean} » invalide ou expiré.`);
+      }
+      return json;
+    },
+
+    trackVisit: async function() {
+      try {
+        if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('nzembo_visit_tracked')) return;
+        if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('nzembo_visit_tracked', '1');
+        const ua = (typeof navigator !== 'undefined' ? navigator.userAgent : '') || '';
+        const deviceType = /Android/i.test(ua) ? 'Android Mobile' : (/iPhone|iPad|iPod/i.test(ua) ? 'iPhone iOS' : 'Desktop PC/Mac');
+        const browser = /Edg/i.test(ua) ? 'Edge' : (/Chrome/i.test(ua) ? 'Chrome' : (/Safari/i.test(ua) ? 'Safari' : (/Firefox/i.test(ua) ? 'Firefox' : 'Autre')));
+        const ref = (typeof document !== 'undefined' && document.referrer) ? new URL(document.referrer).hostname : 'Direct';
+        const u = getCurrentUser();
+        await fetch(`${getBackendApiBase()}/api/analytics/visit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: 'sess_' + Date.now(),
+            userId: u ? u.id : null,
+            referrerSource: ref.includes('google') ? 'Google' : (ref.includes('whatsapp') || ref.includes('wa.me') ? 'WhatsApp' : (ref.includes('t.me') ? 'Telegram' : ref)),
+            deviceType,
+            browser,
+            path: (typeof window !== 'undefined' && window.location) ? window.location.pathname : '/'
+          })
+        }).catch(() => {});
+      } catch {}
+    },
+
+    fetchNotifications: async function(userId = '') {
+      try {
+        const u = userId || (getCurrentUser() && getCurrentUser().id) || '';
+        const res = await fetch(`${getBackendApiBase()}/api/notifications?userId=${encodeURIComponent(u)}`);
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.success && Array.isArray(json.notifications)) {
+          if (typeof window !== 'undefined' && window.NzemboStore && typeof window.NzemboStore.mergeRemoteNotifications === 'function') {
+            window.NzemboStore.mergeRemoteNotifications(json.notifications);
+          }
+          return json.notifications;
+        }
+      } catch {}
+      return [];
+    },
+
+    pushNotification: async function({ title, subject = '', content, category = 'error', categoryLabel = 'Erreur / Alerte', isError = true }) {
+      try {
+        const u = getCurrentUser();
+        await fetch(`${getBackendApiBase()}/api/notifications`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: u ? u.id : 'guest',
+            category,
+            categoryLabel,
+            title,
+            subject,
+            content,
+            isError
+          })
+        }).catch(() => {});
+      } catch {}
+    },
+
+    // ================= MOTEUR AUDIO IA MULTI-OUTILS =================
     getEngineCredits: async function() {
       try {
         const res = await fetchAudioEngine('/generate/credit', { method: 'GET' });
         const data = await res.json();
         return data && typeof data.data === 'number' ? data.data : 0;
-      } catch (e) {
+      } catch {
         return 0;
       }
     },
 
-    // 2. Génération Musicale Réelle avec le moteur audio IA Nzembo
     generateMusic: async function({ prompt, style, occasion, recipient, relationship = '', language = '', secondaryLanguage = '', lyrics, isInstrumental = false, make_instrumental, instrumental, gender = 'female', title = '', styleConfig = null, tags = '', custom_mode, customMode, count = 1, personaId = '', personaModel = 'voice_persona' }) {
-      const user = getCurrentUser();
+      const currentBal = await this.getUserCredits();
+      if (currentBal < 1) {
+        throw new Error('Solde insuffisant. Recharge tes crédits pour créer une chanson.');
+      }
 
       const isInstru = Boolean(isInstrumental || make_instrumental || instrumental);
-
       let resolvedStyleConfig = styleConfig;
       if (!resolvedStyleConfig && typeof window !== 'undefined' && typeof window.getMusicStyleConfig === 'function') {
         resolvedStyleConfig = window.getMusicStyleConfig(style);
@@ -1470,7 +1618,6 @@
         } else if (gLower.includes('choeur') || gLower.includes('chœur') || gLower.includes('gospel')) {
           genderTag = 'gospel choir vocals, vocal ensemble';
         }
-
         if (genderTag && !engineStyle.toLowerCase().includes('male vocal') && !engineStyle.toLowerCase().includes('female vocal') && !engineStyle.toLowerCase().includes('duet') && !engineStyle.toLowerCase().includes('choir')) {
           engineStyle = genderTag + ', ' + engineStyle;
         }
@@ -1492,22 +1639,17 @@
           : '';
         lyricPrompt = (rawLyr.startsWith('[Language:') ? rawLyr : (langTag + rawLyr)).slice(0, 5000);
       } else {
-        const langNote = language
-          ? (secondaryLanguage ? ` chantée en ${language} et ${secondaryLanguage}` : ` chantée exclusivement en ${language}`)
-          : '';
+        const langNote = language ? (secondaryLanguage ? ` chantée en ${language} et ${secondaryLanguage}` : ` chantée exclusivement en ${language}`) : '';
         const recNote = recipient ? ` dédiée à ${recipient}` : '';
         lyricPrompt = (prompt || `Chanson ${styleDisplayName}${langNote} pleine d'émotion pour l'occasion ${occasion || 'fête'}${recNote}`).slice(0, 2900);
       }
-
-      console.log('🎵 [Nzembo Audio] Envoi de la requête de composition musicale...');
-      console.log('📝 Mode:', isCustomMode ? 'Custom Mode (Lyrics)' : 'Description Mode', '| Titre:', songTitle);
 
       const payload = {
         customMode: isCustomMode,
         style: engineStyle.slice(0, 1000),
         instrumental: isInstru,
         model: 'V6',
-        count: 1, // Restitution stricte d'1 seule version unique par tâche
+        count: 1,
         callBackUrl: WEBHOOK_NOOP_URL
       };
 
@@ -1518,11 +1660,8 @@
 
       if (!isInstru && !personaId) {
         const gLower = String(gender || '').toLowerCase();
-        if (gLower === 'male' || gLower.includes('masculin') || gLower.includes('homme') || gLower === 'm') {
-          payload.vocalGender = 'm';
-        } else if (gLower === 'female' || gLower.includes('feminin') || gLower.includes('féminin') || gLower.includes('femme') || gLower === 'f') {
-          payload.vocalGender = 'f';
-        }
+        if (gLower === 'male' || gLower.includes('masculin') || gLower.includes('homme') || gLower === 'm') payload.vocalGender = 'm';
+        else if (gLower === 'female' || gLower.includes('feminin') || gLower.includes('féminin') || gLower.includes('femme') || gLower === 'f') payload.vocalGender = 'f';
       }
 
       if (isCustomMode) {
@@ -1544,21 +1683,16 @@
       });
 
       const data = await res.json().catch(() => ({}));
-
       if (!res.ok || data.code !== 200 || !data.data || !data.data.taskId) {
-        const errorMsg = sanitizeApiErrorMessage(data.msg || data.message, `Erreur serveur audio (Code ${data.code || res.status})`);
-        console.error('❌ [Nzembo Audio] Échec de la requête:', data);
         if (data.code === 429) {
-          throw new Error('Les crédits de génération audio sont temporairement épuisés. Veuillez recharger votre solde.');
+          throw new Error('Capacité de génération temporairement atteinte, réessaie dans un instant.');
         }
-        throw new Error(errorMsg);
+        throw new Error(sanitizeApiErrorMessage(data.msg || data.message, `Erreur du serveur musical (Code ${data.code || res.status}).`));
       }
 
       const taskId = data.data.taskId;
       const songId = 'nz_' + Date.now();
-      console.log('✅ [Nzembo Audio] Tâche acceptée avec succès! Task ID:', taskId);
 
-      // ── SAUVEGARDE IMMÉDIATE DANS SUPABASE POSTGRESQL AVEC STATUT 'en_cours' ──
       await saveCreation({
         id: songId,
         taskId: taskId,
@@ -1571,13 +1705,9 @@
         toolCategory: 'generation',
         status: 'en_cours',
         isProcessing: true
-      }).catch(e => console.warn('Sauvegarde création initiale:', e.message));
+      }).catch(() => {});
 
-      // Décrémenter les crédits de l'utilisateur et synchroniser partout
-      if (user && user.credits > 0) {
-        const nextCredits = Math.max(0, Number(user.credits) - 1);
-        await this.setUserCredits(nextCredits);
-      }
+      const nextCredits = await this.deductCredits(1, `Création : ${songTitle}`, taskId);
 
       return {
         songId,
@@ -1585,43 +1715,33 @@
         eta: 120,
         title: songTitle,
         lyrics: lyricPrompt,
-        styleConfig: resolvedStyleConfig
+        styleConfig: resolvedStyleConfig,
+        remainingCredits: nextCredits
       };
     },
 
-    // 3. Polling du statut de la génération musicale (/generate/record-info) avec dédoublonnage anti-boucle
     pollMusicStatus: function(taskId) {
       if (!taskId) return Promise.resolve({ completed: false, status: 'IN_PROGRESS' });
       const cache = this._musicPollCache || (this._musicPollCache = {});
       if (cache[taskId] && cache[taskId].done) return Promise.resolve(cache[taskId].done);
       if (cache[taskId] && cache[taskId].inFlight) return cache[taskId].inFlight;
 
+      const self = this;
       const run = (async () => {
         try {
-          const res = await fetchAudioEngine(`/generate/record-info?taskId=${encodeURIComponent(taskId)}`, {
-            method: 'GET'
-          });
-
+          const res = await fetchAudioEngine(`/generate/record-info?taskId=${encodeURIComponent(taskId)}`, { method: 'GET' });
           const data = await res.json().catch(() => ({}));
-          if (!data || !data.data) {
-            return { completed: false, status: 'IN_PROGRESS' };
-          }
+          if (!data || !data.data) return { completed: false, status: 'IN_PROGRESS' };
 
           const taskData = data.data;
           const status = taskData.status || '';
-
           const hasReadyTrack = taskData.response && Array.isArray(taskData.response.sunoData) && taskData.response.sunoData.length > 0 && Boolean(taskData.response.sunoData[0].audio_url || taskData.response.sunoData[0].stream_audio_url);
 
-          // Tâche terminée avec succès (Restitution stricte d'1 seule version unique dès FIRST_SUCCESS ou SUCCESS)
           if ((status === 'SUCCESS' || (status === 'FIRST_SUCCESS' && hasReadyTrack)) && hasReadyTrack) {
-            const tracks = taskData.response.sunoData;
-            const track1 = tracks[0] || {};
-
-            // Sauvegarde unique du média audio et de la pochette vers Supabase Storage
+            const track1 = taskData.response.sunoData[0] || {};
             const audio1 = await persistMediaLocally(track1.audio_url || track1.stream_audio_url, 'audio', track1.id || `${taskId}_1`);
             const albumCover = await persistMediaLocally(track1.image_url || track1.source_image_url, 'image', `${taskId}_cover`);
 
-            // ── MISE À JOUR DANS SUPABASE POSTGRESQL (1 SEULE VERSION UNIQUE) ──
             await updateCreation(taskId, {
               status: 'termine',
               isProcessing: false,
@@ -1632,7 +1752,7 @@
               lyrics: track1.prompt,
               audioId: track1.id,
               audioId2: null
-            }).catch(e => console.warn('Mise à jour création terminée:', e.message));
+            }).catch(() => {});
 
             const doneResult = {
               completed: true,
@@ -1651,11 +1771,13 @@
           }
 
           if (status === 'GENERATE_AUDIO_FAILED' || status === 'CREATE_TASK_FAILED' || status === 'FAILED' || status === 'ERROR') {
-            await updateCreation(taskId, {
-              status: 'echoue',
-              isProcessing: false
-            }).catch(() => {});
-
+            await updateCreation(taskId, { status: 'echoue', isProcessing: false }).catch(() => {});
+            // Rembourser le crédit si déduit pour cette tâche échouée
+            if (_taskDeductions[taskId]) {
+              const refund = _taskDeductions[taskId];
+              delete _taskDeductions[taskId];
+              await self.addCredits(refund).catch(() => {});
+            }
             const failResult = {
               completed: false,
               failed: true,
@@ -1666,10 +1788,7 @@
             return failResult;
           }
 
-          return {
-            completed: false,
-            status: status || 'IN_PROGRESS'
-          };
+          return { completed: false, status: status || 'IN_PROGRESS' };
         } catch (pollErr) {
           return { completed: false, status: 'IN_PROGRESS', error: sanitizeApiErrorMessage(pollErr.message) };
         } finally {
@@ -1681,64 +1800,51 @@
       return run;
     },
 
-    // 3.bis Transformation de style & Reprise / Cover (/generate/upload-cover)
-    // Conforme aux spécifications officielles : modèle V6, uploadUrl OU (taskId + audioId) mutuellement exclusifs
     uploadAndCoverAudio: async function({ uploadUrl, taskId, audioId, prompt, lyrics, style, title, instrumental = false, vocalGender, audioWeight, model = 'V6' }) {
-      const isInstru = Boolean(instrumental);
-      const payload = {
-        model: model || 'V6',
-        callBackUrl: WEBHOOK_NOOP_URL,
-        instrumental: isInstru
-      };
+      const targetModel = model || 'V6';
+      const hasValidTaskIds = Boolean(isValidEngineId(taskId) && isValidEngineId(audioId));
+      const hasRemoteUrl = Boolean(uploadUrl && /^https?:\/\//i.test(uploadUrl));
+      const rawStyle = String(style || '').trim();
+      const preserveOriginalStyle = !rawStyle || rawStyle.toLowerCase() === 'par défaut' || rawStyle.toLowerCase() === 'default' || rawStyle.toLowerCase() === 'original';
 
-      const hasHttpUpload = Boolean(uploadUrl && /^https?:\/\//i.test(uploadUrl));
-      const validIds = Boolean(isValidEngineId(taskId) && isValidEngineId(audioId));
-      if (hasHttpUpload) {
+      let endpoint = '/generate/upload-cover';
+      const payload = { model: targetModel, callBackUrl: WEBHOOK_NOOP_URL };
+
+      if (hasValidTaskIds && !hasRemoteUrl) {
+        endpoint = '/generate/cover';
+        payload.taskId = taskId;
+        payload.audioId = audioId;
+      } else if (hasRemoteUrl) {
+        endpoint = '/generate/upload-cover';
         payload.uploadUrl = uploadUrl;
-      } else if (validIds) {
+      } else if (hasValidTaskIds) {
+        endpoint = '/generate/cover';
         payload.taskId = taskId;
         payload.audioId = audioId;
       } else {
-        throw new Error('Source audio invalide. Veuillez importer un fichier audio valide ou sélectionner une chanson générée.');
+        throw new Error('Sélectionne d\'abord une chanson créée ou importe un fichier audio valide.');
       }
 
-      const rawStyle = String(style || '').trim();
-      const preserveOriginalStyle = !rawStyle || rawStyle === 'Par défaut' || rawStyle.toLowerCase().startsWith('par défaut');
+      const isInstru = Boolean(instrumental);
+      payload.instrumental = isInstru;
       if (!preserveOriginalStyle) {
         payload.customMode = true;
         payload.style = rawStyle.slice(0, 1000);
-        payload.title = (title && String(title).trim())
-          ? String(title).trim().slice(0, 80)
-          : 'Reprise Studio Nzembo';
-        if (typeof audioWeight === 'number') {
-          payload.audioWeight = Math.min(1, Math.max(0, Number(audioWeight)));
-        }
+        payload.title = (title && title.trim() && title.toLowerCase() !== 'reprise') ? title.trim().slice(0, 80) : 'Reprise nZembo';
+        if (typeof audioWeight === 'number') payload.audioWeight = Math.min(1, Math.max(0, Number(audioWeight)));
         if (!isInstru) {
           const cleanLyrics = String(lyrics || prompt || title || rawStyle).trim();
-          if (cleanLyrics) {
-            payload.prompt = cleanLyrics.slice(0, 5000);
-          }
-          if (vocalGender === 'm' || vocalGender === 'f') {
-            payload.vocalGender = vocalGender;
-          }
+          if (cleanLyrics) payload.prompt = cleanLyrics.slice(0, 5000);
+          if (vocalGender === 'm' || vocalGender === 'f') payload.vocalGender = vocalGender;
         }
       } else {
         payload.customMode = false;
-        payload.audioWeight = typeof audioWeight === 'number'
-          ? Math.min(1, Math.max(0, Number(audioWeight)))
-          : 0.72;
-        const cleanSimplePrompt = String(prompt || lyrics || title || 'Fidèle reprise musicale conservant le style et l\'identité sonore d\'origine').trim();
-        payload.prompt = cleanSimplePrompt.slice(0, 500);
-        if (!isInstru && (vocalGender === 'm' || vocalGender === 'f')) {
-          payload.vocalGender = vocalGender;
-        }
+        payload.audioWeight = typeof audioWeight === 'number' ? Math.min(1, Math.max(0, Number(audioWeight))) : 0.72;
+        payload.prompt = String(prompt || lyrics || title || 'Fidèle reprise musicale conservant le style d\'origine').trim().slice(0, 500);
+        if (!isInstru && (vocalGender === 'm' || vocalGender === 'f')) payload.vocalGender = vocalGender;
       }
 
-      console.log('🚀 [Nzembo Audio] Envoi upload-cover:', payload);
-      const res = await fetchAudioEngine('/generate/upload-cover', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
+      const res = await fetchAudioEngine(endpoint, { method: 'POST', body: JSON.stringify(payload) });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.code === 200 && data.data && data.data.taskId) {
         return { success: true, taskId: data.data.taskId };
@@ -1746,49 +1852,36 @@
       throw new Error(sanitizeApiErrorMessage(data.msg || data.message, 'Erreur lors du lancement de la reprise / remix'));
     },
 
-    // 3.ter Ajout de voix sur un instrumental (/generate/add-vocals)
     addVocalsToAudio: async function({ uploadUrl, title, style, lyrics, prompt, vocalGender, negativeTags, model = 'V6' }) {
       if (!uploadUrl || !/^https?:\/\//i.test(uploadUrl)) {
-        throw new Error('Veuillez fournir un fichier instrumental accessible pour poser une voix.');
+        throw new Error('Fournis un fichier instrumental accessible pour poser une voix.');
       }
-      const targetStyle = (style || 'Afrobeat, Rumba').slice(0, 1000);
       const payload = {
-        uploadUrl: uploadUrl,
+        uploadUrl,
         callBackUrl: WEBHOOK_NOOP_URL,
-        title: (title || 'Chant Studio sur Instrumental').slice(0, 80),
+        title: (title || 'Voix sur instrumental').slice(0, 80),
         negativeTags: (negativeTags || 'Heavy Metal, Aggressive Screaming Vocals').slice(0, 1000),
-        style: targetStyle,
+        style: (style || 'Afrobeat, Rumba').slice(0, 1000),
         model: model || 'V6'
       };
-      if (vocalGender === 'm' || vocalGender === 'f') {
-        payload.vocalGender = vocalGender;
-      }
+      if (vocalGender === 'm' || vocalGender === 'f') payload.vocalGender = vocalGender;
       if (lyrics && String(lyrics).trim()) payload.lyrics = String(lyrics).trim().slice(0, 5000);
       if (prompt && String(prompt).trim()) payload.prompt = String(prompt).trim().slice(0, 5000);
 
-      console.log('🚀 [Nzembo Audio] Envoi add-vocals:', payload);
-      const res = await fetchAudioEngine('/generate/add-vocals', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
+      const res = await fetchAudioEngine('/generate/add-vocals', { method: 'POST', body: JSON.stringify(payload) });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data.code === 200 && data.data && data.data.taskId) {
-        return { success: true, taskId: data.data.taskId };
-      }
+      if (res.ok && data.code === 200 && data.data && data.data.taskId) return { success: true, taskId: data.data.taskId };
       throw new Error(sanitizeApiErrorMessage(data.msg || data.message, 'Erreur lors de l\'ajout de voix sur l\'instrumentale'));
     },
 
-    // 3.quater Ajout d'accompagnement instrumental sur une voix (/generate/add-instrumental)
-    // Conforme aux spécifications officielles : required uploadUrl, title, negativeTags, tags, callBackUrl (+ model V6)
     addInstrumentalToAudio: async function({ uploadUrl, title, tags, style, negativeTags, lyrics, vocalGender, model = 'V6' }) {
       if (!uploadUrl || !/^https?:\/\//i.test(uploadUrl)) {
-        throw new Error('Veuillez fournir ou téléverser une piste vocale valide pour composer l\'instrumental.');
+        throw new Error('Fournis ou importe une piste vocale valide pour composer l\'instrumental.');
       }
-      const targetTags = (tags || style || 'Acoustic Guitar, Warm Bass, Rumba Congolaise, Soft Percussion').slice(0, 1000);
       const payload = {
-        uploadUrl: uploadUrl,
-        title: (title || 'Arrangement Instrumental Studio').slice(0, 80),
-        tags: targetTags,
+        uploadUrl,
+        title: (title || 'Arrangement instrumental').slice(0, 80),
+        tags: (tags || style || 'Acoustic Guitar, Warm Bass, Rumba Congolaise, Soft Percussion').slice(0, 1000),
         negativeTags: (negativeTags || 'Distortion, Harsh Noise, Clipping, Low Quality, Out of tune').slice(0, 1000),
         callBackUrl: WEBHOOK_NOOP_URL,
         model: model || 'V6'
@@ -1796,19 +1889,12 @@
       if (lyrics && String(lyrics).trim()) payload.lyrics = String(lyrics).trim().slice(0, 5000);
       if (vocalGender === 'm' || vocalGender === 'f') payload.vocalGender = vocalGender;
 
-      console.log('🚀 [Nzembo Audio] Envoi add-instrumental:', payload);
-      const res = await fetchAudioEngine('/generate/add-instrumental', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
+      const res = await fetchAudioEngine('/generate/add-instrumental', { method: 'POST', body: JSON.stringify(payload) });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data.code === 200 && data.data && data.data.taskId) {
-        return { success: true, taskId: data.data.taskId };
-      }
+      if (res.ok && data.code === 200 && data.data && data.data.taskId) return { success: true, taskId: data.data.taskId };
       throw new Error(sanitizeApiErrorMessage(data.msg || data.message, 'Erreur lors de la génération de l\'arrangement instrumental'));
     },
 
-    // 4. Génération de Paroles autonomes (/api/v1/lyrics - limite stricte 200 caractères)
     generateLyrics: async function(input, languageOverride = '') {
       let condensedPrompt = '';
       if (input && typeof input === 'object') {
@@ -1821,45 +1907,32 @@
         const tone = String(input.tone || '').trim();
         const rawStory = String(input.story || input.theme || input.prompt || '').replace(/\s+/g, ' ').trim();
 
-        const langDir = lang
-          ? (isBilingual
-              ? `Écris en mélange bilingue ${lang}+${secLang}.`
-              : `Écris toutes les paroles en ${lang}, sans mélange.`)
-          : '';
+        const langDir = lang ? (isBilingual ? `Écris en mélange bilingue ${lang}+${secLang}.` : `Écris toutes les paroles en ${lang}, sans mélange.`) : '';
         const occPart = occasion ? ` ${occasion}.` : '';
         const stylePart = style ? ` Style: ${style}.` : '';
         const tonePart = tone ? ` Ton: ${tone}.` : '';
         const recPart = recipient ? ` Pour: ${recipient}.` : '';
-        const structRule = ` Structure: couplet, refrain, pont.`;
         const hasStory = Boolean(rawStory && rawStory.length >= 10);
         const storyIntro = hasStory ? ` Histoire vraie: ` : ` Thème: `;
         const storyContent = hasStory ? rawStory : (rawStory || `Célébration ${occasion || 'joyeuse'}`);
 
-        const prefix = `${langDir}${occPart}${stylePart}${tonePart}${recPart}${structRule}${storyIntro}`.trim();
+        const prefix = `${langDir}${occPart}${stylePart}${tonePart}${recPart} Structure: couplet, refrain, pont.${storyIntro}`.trim();
         const remain = Math.max(20, 198 - prefix.length);
         const clippedTheme = storyContent.length > remain ? storyContent.slice(0, remain).replace(/\s+\S*$/, '') : storyContent;
         condensedPrompt = `${prefix} ${clippedTheme}`.replace(/\s+/g, ' ').trim();
       } else {
         const lang = String(languageOverride || '').trim();
         const raw = String(input || 'Chanson joyeuse pleine d\'émotion').replace(/\s+/g, ' ').trim();
-        condensedPrompt = lang
-          ? `Écris toutes les paroles en ${lang}, sans mélange: ${raw}`.replace(/\s+/g, ' ').trim()
-          : raw;
+        condensedPrompt = lang ? `Écris toutes les paroles en ${lang}, sans mélange: ${raw}`.replace(/\s+/g, ' ').trim() : raw;
       }
 
       if (condensedPrompt.length > 200) {
         condensedPrompt = condensedPrompt.slice(0, 200).replace(/\s+\S*$/, '') || condensedPrompt.slice(0, 200);
       }
 
-      const payload = {
-        prompt: condensedPrompt,
-        callBackUrl: WEBHOOK_NOOP_URL
-      };
-
-      console.log('✍️ [Nzembo Lyrics] Prompt <= 200 chars:', payload.prompt);
       const res = await fetchAudioEngine('/lyrics', {
         method: 'POST',
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ prompt: condensedPrompt, callBackUrl: WEBHOOK_NOOP_URL })
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.code === 200 && data.data && data.data.taskId) {
@@ -1870,17 +1943,13 @@
 
     pollLyricsStatus: async function(taskId) {
       try {
-        const res = await fetchAudioEngine(`/lyrics/record-info?taskId=${encodeURIComponent(taskId)}`, {
-          method: 'GET'
-        });
+        const res = await fetchAudioEngine(`/lyrics/record-info?taskId=${encodeURIComponent(taskId)}`, { method: 'GET' });
         const data = await res.json().catch(() => ({}));
-        if (!data || !data.data) {
-          return { completed: false, status: 'IN_PROGRESS' };
-        }
+        if (!data || !data.data) return { completed: false, status: 'IN_PROGRESS' };
         const st = data.data.status;
         if (st === 'SUCCESS') {
           let text = '';
-          let title = 'Paroles IA';
+          let title = 'Paroles';
           const resp = data.data.response;
           if (resp) {
             if (Array.isArray(resp.data) && resp.data.length > 0) {
@@ -1891,75 +1960,42 @@
               title = resp.title || title;
             }
           }
-          if (text) {
-            return { completed: true, status: 'SUCCESS', lyrics: text, title: title, textResult: text };
-          }
+          if (text) return { completed: true, status: 'SUCCESS', lyrics: text, title, textResult: text };
         }
         if (st === 'GENERATE_LYRICS_FAILED' || st === 'CREATE_TASK_FAILED' || st === 'FAILED') {
           return { completed: false, failed: true, status: 'FAILED', message: sanitizeApiErrorMessage(data.data.errorMessage, 'Échec de la génération de paroles') };
         }
         return { completed: false, status: st || 'IN_PROGRESS' };
-      } catch (e) {
+      } catch {
         return { completed: false, status: 'RETRY' };
       }
     },
 
-    // 5. Séparation de pistes & Stem Audio (/vocal-removal/generate)
     separateStems: async function({ taskId, audioId, audioUrl, type = 'separate_vocal', stemName = '' }) {
-      const payload = {
-        type: type || 'separate_vocal',
-        callBackUrl: WEBHOOK_NOOP_URL
-      };
-
+      const payload = { type: type || 'separate_vocal', callBackUrl: WEBHOOK_NOOP_URL };
       if (audioUrl && audioUrl.startsWith('http') && (!audioId || audioId.startsWith('audio_') || !isValidEngineId(audioId))) {
         payload.audioUrl = audioUrl;
       } else {
         if (taskId) payload.taskId = taskId;
         if (audioId) payload.audioId = audioId;
       }
+      if (stemName && type === 'split_stem_advanced') payload.stemName = stemName;
 
-      if (stemName && type === 'split_stem_advanced') {
-        payload.stemName = stemName;
-      }
-
-      console.log('🚀 [Nzembo Audio] Envoi vocal-removal/generate:', payload);
-      const res = await fetchAudioEngine('/vocal-removal/generate', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
+      const res = await fetchAudioEngine('/vocal-removal/generate', { method: 'POST', body: JSON.stringify(payload) });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data.code === 200 && data.data && data.data.taskId) {
-        return { success: true, taskId: data.data.taskId };
-      }
+      if (res.ok && data.code === 200 && data.data && data.data.taskId) return { success: true, taskId: data.data.taskId };
       throw new Error(sanitizeApiErrorMessage(data.msg || data.message, 'Échec de la séparation des pistes audio'));
     },
 
     pollStemStatus: async function(taskId) {
-      const res = await fetchAudioEngine(`/vocal-removal/record-info?taskId=${encodeURIComponent(taskId)}`, {
-        method: 'GET'
-      });
+      const res = await fetchAudioEngine(`/vocal-removal/record-info?taskId=${encodeURIComponent(taskId)}`, { method: 'GET' });
       const data = await res.json().catch(() => ({}));
       if (data && data.data && (data.data.successFlag === 'SUCCESS' || data.data.status === 'SUCCESS')) {
         const resp = data.data.response || {};
         const vocalUrl = await persistMediaLocally(resp.vocalUrl, 'audio', `${taskId}_vocals`);
         const instrumentalUrl = await persistMediaLocally(resp.instrumentalUrl, 'audio', `${taskId}_instru`);
-
-        await updateCreation(taskId, {
-          status: 'termine',
-          isProcessing: false,
-          vocalUrl: vocalUrl,
-          instrumentalUrl: instrumentalUrl,
-          audioUrl: instrumentalUrl || vocalUrl
-        }).catch(() => {});
-
-        return {
-          completed: true,
-          status: 'SUCCESS',
-          vocalUrl: vocalUrl,
-          instrumentalUrl: instrumentalUrl,
-          audioUrl: instrumentalUrl || vocalUrl,
-          stems: resp
-        };
+        await updateCreation(taskId, { status: 'termine', isProcessing: false, vocalUrl, instrumentalUrl, audioUrl: instrumentalUrl || vocalUrl }).catch(() => {});
+        return { completed: true, status: 'SUCCESS', vocalUrl, instrumentalUrl, audioUrl: instrumentalUrl || vocalUrl, stems: resp };
       }
       if (data && data.data && (data.data.successFlag === 'FAILED' || data.data.errorCode)) {
         return { completed: false, failed: true, message: sanitizeApiErrorMessage(data.data.errorMessage, 'Échec de la séparation des pistes') };
@@ -1967,45 +2003,26 @@
       return { completed: false, status: 'IN_PROGRESS' };
     },
 
-    // 6. Extension de morceau (/generate/extend)
     extendMusic: async function({ taskId, audioId, uploadUrl, lyrics, style, title, continueAt = 60, model = 'V6' }) {
-      const targetModel = model || 'V6';
-      const payload = {
-        model: targetModel,
-        continueAt: Math.max(1, parseInt(continueAt, 10) || 60),
-        callBackUrl: WEBHOOK_NOOP_URL
-      };
-
+      const payload = { model: model || 'V6', continueAt: Math.max(1, parseInt(continueAt, 10) || 60), callBackUrl: WEBHOOK_NOOP_URL };
       let endpoint = '/generate/extend';
-      if (uploadUrl && uploadUrl.startsWith('http')) {
+      if (uploadUrl && uploadUrl.startsWith('http') && (!isValidEngineId(taskId) || !isValidEngineId(audioId))) {
         payload.uploadUrl = uploadUrl;
         endpoint = '/generate/upload-extend';
       } else {
         if (taskId) payload.taskId = taskId;
         if (audioId) payload.audioId = audioId;
       }
-
-      const targetStyle = (style || 'Afrobeat, Rumba Modern').slice(0, 1000);
       if (lyrics) payload.lyrics = lyrics.slice(0, 5000);
-      if (targetStyle) {
-        payload.style = targetStyle;
-      }
+      payload.style = (style || 'Afrobeat, Rumba Modern').slice(0, 1000);
       if (title) payload.title = title.slice(0, 80);
 
-      console.log('🚀 [Nzembo Audio] Envoi extend:', endpoint, payload);
-      const res = await fetchAudioEngine(endpoint, {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
+      const res = await fetchAudioEngine(endpoint, { method: 'POST', body: JSON.stringify(payload) });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data.code === 200 && data.data && data.data.taskId) {
-        return { success: true, taskId: data.data.taskId };
-      }
+      if (res.ok && data.code === 200 && data.data && data.data.taskId) return { success: true, taskId: data.data.taskId };
       throw new Error(sanitizeApiErrorMessage(data.msg || data.message, 'Échec de l\'extension du morceau'));
     },
 
-    // 7. Génération de Vidéo MP4 HD avec paroles intégrées (/mp4/generate)
-    // Paramètres optionnels author/domainName volontairement omis pour éviter tout watermark textuel
     createMusicVideo: async function({ taskId, audioId, audioUrl = '', title = '' }) {
       let srcTaskId = String(taskId || '').trim();
       let srcAudioId = String(audioId || '').trim();
@@ -2026,9 +2043,7 @@
 
       if (!isValidEngineId(srcAudioId) && audioUrl) {
         const uuidMatch = String(audioUrl).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
-        if (uuidMatch && isValidEngineId(uuidMatch[0])) {
-          srcAudioId = uuidMatch[0];
-        }
+        if (uuidMatch && isValidEngineId(uuidMatch[0])) srcAudioId = uuidMatch[0];
       }
 
       if (!isValidEngineId(srcTaskId) || !isValidEngineId(srcAudioId)) {
@@ -2050,62 +2065,39 @@
               }
             }
           }
-        } catch (e) {}
+        } catch {}
       }
 
       if (isValidEngineId(srcTaskId) && !isValidEngineId(srcAudioId)) {
         try {
           const recRes = await fetchAudioEngine(`/generate/record-info?taskId=${encodeURIComponent(srcTaskId)}`, { method: 'GET' });
           const recData = await recRes.json().catch(() => ({}));
-          const tracks = recData && recData.data && recData.data.response && recData.data.response.sunoData;
-          if (Array.isArray(tracks) && tracks[0] && isValidEngineId(tracks[0].id)) {
-            srcAudioId = tracks[0].id;
-          }
-        } catch (e) {}
+          const tracks = recData?.data?.response?.sunoData;
+          if (Array.isArray(tracks) && tracks[0] && isValidEngineId(tracks[0].id)) srcAudioId = tracks[0].id;
+        } catch {}
       }
 
       if (!isValidEngineId(srcTaskId) || !isValidEngineId(srcAudioId)) {
-        throw new Error('Cette chanson n\'a pas d\'identifiant audio compatible pour la vidéo MP4. Sélectionnez une chanson créée dans Nzembo Studio.');
+        throw new Error('Cette chanson n\'a pas d\'identifiant compatible pour la vidéo MP4. Sélectionne une chanson créée sur nZembo.');
       }
 
-      const payload = {
-        taskId: srcTaskId,
-        audioId: srcAudioId,
-        callBackUrl: WEBHOOK_NOOP_URL
-      };
-
-      console.log('🎬 [Nzembo Video /mp4/generate] Payload officiel:', payload);
       const res = await fetchAudioEngine('/mp4/generate', {
         method: 'POST',
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ taskId: srcTaskId, audioId: srcAudioId, callBackUrl: WEBHOOK_NOOP_URL })
       });
       const data = await res.json().catch(() => ({}));
-
       if (data && data.data && data.data.taskId && (res.ok || data.code === 200 || data.code === 409)) {
-        console.log(`✅ [Nzembo Video /mp4/generate] Tâche vidéo prête/en cours (code ${data.code}). TaskId:`, data.data.taskId);
-        return {
-          success: true,
-          isEngineTask: true,
-          taskId: data.data.taskId,
-          sourceTaskId: srcTaskId,
-          sourceAudioId: srcAudioId,
-          conversionType: 'mp4',
-          eta: data.code === 409 ? 6 : 90
-        };
+        return { success: true, isEngineTask: true, taskId: data.data.taskId, sourceTaskId: srcTaskId, sourceAudioId: srcAudioId, conversionType: 'mp4', eta: data.code === 409 ? 6 : 90 };
       }
-
-      console.warn('⚠️ [Nzembo Video /mp4/generate] Refus serveur:', data);
-      if (data.code === 429) throw new Error('Crédits vidéo épuisés. Veuillez recharger votre solde.');
+      if (data.code === 429) throw new Error('Crédits vidéo épuisés.');
       throw new Error(sanitizeApiErrorMessage(data.msg || data.message, `Échec du lancement de la vidéo (code ${data.code || res.status}).`));
     },
 
-    // Polling du statut de la vidéo MP4 (/mp4/record-info)
     pollMusicVideoStatus: function(taskId) {
       if (!taskId) return Promise.resolve({ completed: false, status: 'PENDING' });
       if (!isValidEngineId(taskId)) {
-        return Promise.resolve({ completed: false, failed: true, status: 'FAILED', message: 'Tâche vidéo invalide (identifiant local).' });
+        return Promise.resolve({ completed: false, failed: true, status: 'FAILED', message: 'Tâche vidéo invalide.' });
       }
-
       const cache = this._videoPollCache || (this._videoPollCache = {});
       if (cache[taskId] && cache[taskId].done) return Promise.resolve(cache[taskId].done);
       if (cache[taskId] && cache[taskId].inFlight) return cache[taskId].inFlight;
@@ -2115,129 +2107,79 @@
         try {
           const res = await fetchAudioEngine(`/mp4/record-info?taskId=${encodeURIComponent(taskId)}`, { method: 'GET' });
           const data = await res.json().catch(() => ({}));
-          if (!data || data.code !== 200 || !data.data) {
-            return { completed: false, status: 'PENDING' };
-          }
+          if (!data || data.code !== 200 || !data.data) return { completed: false, status: 'PENDING' };
 
           const taskData = data.data;
           const flag = String(taskData.successFlag || taskData.status || 'PENDING').toUpperCase();
           const rawVideoUrl = (taskData.response && (taskData.response.videoUrl || taskData.response.video_url)) || '';
 
           if (flag === 'SUCCESS' && rawVideoUrl) {
-            console.log('🎉 [Nzembo Video] Vidéo MP4 prête:', rawVideoUrl);
             const result = { completed: true, status: 'SUCCESS', videoUrl: rawVideoUrl, rawVideoUrl, audioUrl: '' };
             cache[taskId] = { done: result };
-
-            updateCreation(taskId, { status: 'termine', isProcessing: false, videoUrl: rawVideoUrl, audioUrl: '' })
-              .catch(e => console.warn('Mise à jour Supabase creations:', e.message));
-
+            updateCreation(taskId, { status: 'termine', isProcessing: false, videoUrl: rawVideoUrl, audioUrl: '' }).catch(() => {});
             self.persistVideoInBackground(taskId, rawVideoUrl);
             return result;
           }
-
-          if (flag === 'SUCCESS' && !rawVideoUrl) {
-            return { completed: false, status: 'PENDING' };
-          }
-
           if (['GENERATE_MP4_FAILED', 'CREATE_TASK_FAILED', 'CALLBACK_EXCEPTION', 'FAILED'].includes(flag) || taskData.errorCode) {
-            const result = {
-              completed: false,
-              failed: true,
-              status: 'FAILED',
-              message: sanitizeApiErrorMessage(taskData.errorMessage, 'La génération de la vidéo MP4 a échoué sur les serveurs Nzembo.')
-            };
+            const result = { completed: false, failed: true, status: 'FAILED', message: sanitizeApiErrorMessage(taskData.errorMessage, 'La création de la vidéo MP4 a échoué.') };
             cache[taskId] = { done: result };
             updateCreation(taskId, { status: 'echoue', isProcessing: false }).catch(() => {});
             return result;
           }
-
           return { completed: false, status: flag || 'PENDING' };
-        } catch (err) {
-          console.warn('⚠️ Polling /mp4/record-info:', err.message);
+        } catch {
           return { completed: false, status: 'PENDING' };
         } finally {
           if (cache[taskId]) cache[taskId].inFlight = null;
         }
       })();
-
       cache[taskId] = Object.assign(cache[taskId] || {}, { inFlight: run });
       return run;
     },
 
-    // Copie de la vidéo MP4 vers Supabase Storage (non bloquant) puis notification de l'UI
     persistVideoInBackground: function(taskId, rawVideoUrl) {
       const store = this._persistedVideos || (this._persistedVideos = {});
       if (!rawVideoUrl || store[taskId]) return;
       store[taskId] = true;
       persistMediaLocally(rawVideoUrl, 'video', `${taskId}_video`).then(storedUrl => {
         if (!storedUrl || storedUrl === rawVideoUrl || !/^https?:\/\//.test(storedUrl) || /localhost|127\.0\.0\.1/.test(storedUrl)) return;
-        console.log('💾 [Supabase Storage] Vidéo MP4 hébergée durablement:', storedUrl);
         updateCreation(taskId, { videoUrl: storedUrl }).catch(() => {});
         if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent !== 'undefined') {
           window.dispatchEvent(new CustomEvent('nzembo-video-persisted', { detail: { taskId, rawVideoUrl, storedUrl } }));
         }
-      }).catch(e => console.warn('Persistance vidéo Supabase:', e.message));
+      }).catch(() => {});
     },
 
-    // Paroles horodatées internes (/generate/get-timestamped-lyrics) -> sous-titres WebVTT
     getTimestampedLyrics: async function({ taskId, audioId }) {
       if (!isValidEngineId(taskId) || !isValidEngineId(audioId)) return { alignedWords: [], vtt: '' };
       try {
-        const res = await fetchAudioEngine('/generate/get-timestamped-lyrics', {
-          method: 'POST',
-          body: JSON.stringify({ taskId, audioId })
-        });
+        const res = await fetchAudioEngine('/generate/get-timestamped-lyrics', { method: 'POST', body: JSON.stringify({ taskId, audioId }) });
         const data = await res.json().catch(() => ({}));
         const words = (data && data.code === 200 && data.data && Array.isArray(data.data.alignedWords)) ? data.data.alignedWords : [];
         return { alignedWords: words, vtt: buildLyricsVtt(words) };
-      } catch (e) {
-        console.warn('Paroles horodatées indisponibles:', e.message);
+      } catch {
         return { alignedWords: [], vtt: '' };
       }
     },
 
-    // 8. Conversion Audio en WAV haute fidélité (/wav/generate)
     convertToWav: async function({ taskId, audioId }) {
-      if (!taskId && !audioId) {
-        throw new Error('Identifiant audioId ou taskId requis pour la conversion WAV Master.');
-      }
-      const payload = {
-        callBackUrl: WEBHOOK_NOOP_URL
-      };
+      if (!taskId && !audioId) throw new Error('Identifiant requis pour la conversion WAV Master.');
+      const payload = { callBackUrl: WEBHOOK_NOOP_URL };
       if (taskId) payload.taskId = taskId;
       if (audioId) payload.audioId = audioId;
-
-      const res = await fetchAudioEngine('/wav/generate', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
+      const res = await fetchAudioEngine('/wav/generate', { method: 'POST', body: JSON.stringify(payload) });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data.code === 200 && data.data && data.data.taskId) {
-        return { success: true, taskId: data.data.taskId };
-      }
+      if (res.ok && data.code === 200 && data.data && data.data.taskId) return { success: true, taskId: data.data.taskId };
       throw new Error(sanitizeApiErrorMessage(data.msg || data.message, 'Échec de la conversion au format WAV'));
     },
 
     pollWavStatus: async function(taskId) {
-      const res = await fetchAudioEngine(`/wav/record-info?taskId=${encodeURIComponent(taskId)}`, {
-        method: 'GET'
-      });
+      const res = await fetchAudioEngine(`/wav/record-info?taskId=${encodeURIComponent(taskId)}`, { method: 'GET' });
       const data = await res.json().catch(() => ({}));
       if (data && data.data && (data.data.successFlag === 'SUCCESS' || data.data.status === 'SUCCESS')) {
-        const rawWavUrl = data.data.response?.audioWavUrl;
-        const wavUrl = await persistMediaLocally(rawWavUrl, 'audio', `${taskId}_wav`);
-
-        await updateCreation(taskId, {
-          status: 'termine',
-          isProcessing: false,
-          audioUrl: wavUrl
-        }).catch(() => {});
-
-        return {
-          completed: true,
-          status: 'SUCCESS',
-          audioUrl: wavUrl
-        };
+        const wavUrl = await persistMediaLocally(data.data.response?.audioWavUrl, 'audio', `${taskId}_wav`);
+        await updateCreation(taskId, { status: 'termine', isProcessing: false, audioUrl: wavUrl }).catch(() => {});
+        return { completed: true, status: 'SUCCESS', audioUrl: wavUrl };
       }
       if (data && data.data && (data.data.successFlag === 'FAILED' || data.data.errorCode)) {
         return { completed: false, failed: true, message: sanitizeApiErrorMessage(data.data.errorMessage, 'Échec de la conversion WAV') };
@@ -2245,65 +2187,51 @@
       return { completed: false, status: 'IN_PROGRESS' };
     },
 
-    // 9. Génération de Pochette d'Album Personnalisée
     generateAlbumCover: async function(taskId) {
-      if (!taskId) {
-        throw new Error('Veuillez sélectionner une chanson générée pour créer sa pochette (taskId requis).');
-      }
-      const payload = {
-        taskId: taskId,
-        callBackUrl: WEBHOOK_NOOP_URL
-      };
-
-      const res = await fetchAudioEngine('/suno/cover/generate', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
+      if (!taskId) throw new Error('Sélectionne une chanson générée pour créer sa pochette.');
+      const res = await fetchAudioEngine('/suno/cover/generate', { method: 'POST', body: JSON.stringify({ taskId, callBackUrl: WEBHOOK_NOOP_URL }) });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data.code === 200 && data.data && data.data.taskId) {
-        return { success: true, taskId: data.data.taskId };
-      }
-      throw new Error(sanitizeApiErrorMessage(data.msg || data.message, 'Échec de la génération de la pochette d\'album'));
+      if (res.ok && data.code === 200 && data.data && data.data.taskId) return { success: true, taskId: data.data.taskId };
+      throw new Error(sanitizeApiErrorMessage(data.msg || data.message, 'Échec de la génération de pochette'));
     },
 
     pollAlbumCoverStatus: async function(taskId) {
-      const res = await fetchAudioEngine(`/suno/cover/record-info?taskId=${encodeURIComponent(taskId)}`, {
-        method: 'GET'
-      });
+      const res = await fetchAudioEngine(`/suno/cover/record-info?taskId=${encodeURIComponent(taskId)}`, { method: 'GET' });
       const data = await res.json().catch(() => ({}));
       if (data && data.data && (data.data.successFlag === 1 || data.data.status === 'SUCCESS')) {
         const images = data.data.response?.images || [];
-        const rawCover = images[0] || '';
-        const localCover = await persistMediaLocally(rawCover, 'image', `${taskId}_cover_art`);
-
-        await updateCreation(taskId, {
-          status: 'termine',
-          isProcessing: false,
-          albumCover: localCover,
-          coverUrl: localCover
-        }).catch(() => {});
-
-        return {
-          completed: true,
-          status: 'SUCCESS',
-          coverUrl: localCover,
-          images: images
-        };
+        const localCover = await persistMediaLocally(images[0] || '', 'image', `${taskId}_cover_art`);
+        await updateCreation(taskId, { status: 'termine', isProcessing: false, albumCover: localCover, coverUrl: localCover }).catch(() => {});
+        return { completed: true, status: 'SUCCESS', coverUrl: localCover, images };
       }
       return { completed: false, status: 'IN_PROGRESS' };
     },
 
-    // 10. Téléversement universel d'un fichier audio ou vidéo local (Mobile/PC -> File Upload + Supabase CDN + Transcodage WAV secours)
     uploadLocalAudioFile: async function(fileOrBlob, fileName = 'track.mp3', options = {}) {
       if (!fileOrBlob || (typeof fileOrBlob.size === 'number' && fileOrBlob.size === 0)) {
         throw new Error('Fichier audio vide ou illisible. Réessaie avec un autre fichier.');
       }
 
+      const env = getEnvConfig();
+      const token = env.ENGINE_BEARER_TOKEN;
       const safeName = ensureAudioFileName(fileName || (fileOrBlob && fileOrBlob.name), fileOrBlob);
       const mimeType = resolveUploadMimeType(fileOrBlob, safeName);
       const requireRemoteUrl = options.requireRemoteUrl !== false;
 
-      console.log('📤 [Nzembo Cloud] Téléversement audio universel...', { fileName: safeName, mimeType, size: fileOrBlob.size });
+      async function toBase64DataUrl(blobCandidate, candidateMime) {
+        if (typeof FileReader !== 'undefined' && blobCandidate instanceof Blob) {
+          return await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.onerror = () => reject(new Error('Lecture impossible'));
+            reader.readAsDataURL(blobCandidate);
+          });
+        } else if (typeof Buffer !== 'undefined' && blobCandidate && typeof blobCandidate.arrayBuffer === 'function') {
+          const buf = Buffer.from(await blobCandidate.arrayBuffer());
+          return `data:${candidateMime};base64,${buf.toString('base64')}`;
+        }
+        return '';
+      }
 
       async function tryUploadSingleBlob(blobCandidate, candidateName, candidateMime) {
         let uploadBlob = blobCandidate;
@@ -2311,112 +2239,85 @@
           if (blobCandidate && typeof Blob !== 'undefined' && blobCandidate instanceof Blob && (!blobCandidate.type || blobCandidate.type !== candidateMime)) {
             uploadBlob = new Blob([blobCandidate], { type: candidateMime });
           }
-        } catch (e) {}
+        } catch {}
 
         const isHttpOrigin = (typeof window !== 'undefined' && window.location && window.location.protocol === 'http:');
+        const isBrowserHttp = (typeof window !== 'undefined' && window.location && /^https?:$/i.test(window.location.protocol));
 
-        // A. Relais proxy local sans CORS sur environnement HTTP local
+        // A. Proxy local HTTP (:3001)
         if (isHttpOrigin) {
           try {
-            const storageBase = getStorageBase();
             const fdProxy = new FormData();
             fdProxy.append('file', uploadBlob, candidateName);
             fdProxy.append('uploadPath', 'nzembo/audio');
             fdProxy.append('fileName', `${Date.now()}_${candidateName}`);
-            const fetchOpts = { method: 'POST', body: fdProxy };
-            if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
-              fetchOpts.signal = AbortSignal.timeout(35000);
-            }
-            const resP = await fetch(`${storageBase}/api/file-stream-upload`, fetchOpts);
+            const resP = await fetch(`${getStorageBase()}/api/file-stream-upload`, {
+              method: 'POST',
+              body: fdProxy,
+              signal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined
+            });
             const jP = await resP.json().catch(() => ({}));
             const dlP = jP && (jP.downloadUrl || jP.url || (jP.data && (jP.data.downloadUrl || jP.data.fileUrl || jP.data.url)));
-            if (resP.ok && dlP && /^https?:\/\//i.test(dlP)) {
-              console.log('✅ [Nzembo Cloud] Hébergé via Proxy Stream:', dlP);
-              return dlP;
-            }
-          } catch (proxyUploadErr) {}
+            if (resP.ok && dlP && /^https?:\/\//i.test(dlP)) return dlP;
+          } catch {}
         }
 
-        // B. Endpoint direct File Stream Upload
+        // B. Stockage nZembo Bucket
         try {
-          const fd = new FormData();
-          fd.append('file', uploadBlob, candidateName);
-          fd.append('uploadPath', 'nzembo/audio');
-          fd.append('fileName', `${Date.now()}_${candidateName}`);
-          const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-          const timer = controller ? setTimeout(() => controller.abort(), 45000) : null;
+          const sbUrl = await uploadMediaToSupabase(uploadBlob, candidateName, 'audio');
+          if (sbUrl && /^https?:\/\//i.test(sbUrl)) return sbUrl;
+        } catch {}
+
+        // C. Proxy Backend Same-Origin Base64 (zéro CORS en production HTTPS)
+        if (isBrowserHttp && (!uploadBlob.size || uploadBlob.size <= 4 * 1024 * 1024)) {
           try {
-            if (!ENGINE_BEARER_TOKEN) throw new Error('ENGINE_BEARER_TOKEN absent');
+            const b64 = await toBase64DataUrl(uploadBlob, candidateMime);
+            if (b64) {
+              const rSrv = await fetch(`${getBackendApiBase()}/api/engine/upload-base64`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ base64Data: b64, uploadPath: 'nzembo/audio', fileName: `${Date.now()}_${candidateName}` })
+              });
+              const jSrv = await rSrv.json().catch(() => ({}));
+              const dlSrv = jSrv && (jSrv.downloadUrl || jSrv.url || (jSrv.data && (jSrv.data.downloadUrl || jSrv.data.fileUrl || jSrv.data.url)));
+              if (rSrv.ok && dlSrv && /^https?:\/\//i.test(dlSrv)) return dlSrv;
+            }
+          } catch {}
+        }
+
+        // D. Upload direct Stream / Base64
+        if (token) {
+          try {
+            const fd = new FormData();
+            fd.append('file', uploadBlob, candidateName);
+            fd.append('uploadPath', 'nzembo/audio');
+            fd.append('fileName', `${Date.now()}_${candidateName}`);
             const res = await fetch(`${FILE_UPLOAD_BASE}/file-stream-upload`, {
               method: 'POST',
-              headers: { 'Authorization': `Bearer ${ENGINE_BEARER_TOKEN}` },
-              body: fd,
-              signal: controller ? controller.signal : undefined
+              headers: { 'Authorization': `Bearer ${token}` },
+              body: fd
             });
             const json = await res.json().catch(() => ({}));
             const dlUrl = json && (json.downloadUrl || json.url || (json.data && (json.data.downloadUrl || json.data.fileUrl || json.data.url)));
-            if (res.ok && dlUrl && /^https?:\/\//i.test(dlUrl)) {
-              console.log('✅ [Nzembo Cloud] Fichier audio hébergé via Stream Upload:', dlUrl);
-              return dlUrl;
-            }
-          } finally {
-            if (timer) clearTimeout(timer);
-          }
-        } catch (streamErr) {
-          console.warn('⚠️ [Nzembo Cloud] File Stream Upload indisponible:', streamErr.message);
-        }
+            if (res.ok && dlUrl && /^https?:\/\//i.test(dlUrl)) return dlUrl;
+          } catch {}
 
-        // C. Relais Supabase Storage Public Bucket ('nzembo-media')
-        try {
-          const supabasePublicUrl = await uploadMediaToSupabase(uploadBlob, candidateName, 'audio');
-          if (supabasePublicUrl && /^https?:\/\//i.test(supabasePublicUrl)) {
-            console.log('✅ [Nzembo Cloud] Fichier hébergé sur Supabase CDN:', supabasePublicUrl);
-            return supabasePublicUrl;
-          }
-        } catch (sbErr) {
-          console.warn('⚠️ [Nzembo Cloud] Relais Supabase indisponible:', sbErr);
-        }
-
-        // D. Fallback Base64 Upload (uniquement <= 10 Mo pour préserver la mémoire mobile)
-        if (!uploadBlob.size || uploadBlob.size <= 10 * 1024 * 1024) {
-          try {
-            let base64Data = '';
-            if (typeof FileReader !== 'undefined' && uploadBlob instanceof Blob) {
-              base64Data = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(String(reader.result || ''));
-                reader.onerror = () => reject(new Error('Lecture impossible'));
-                reader.readAsDataURL(uploadBlob);
-              });
-            } else if (typeof Buffer !== 'undefined' && uploadBlob && typeof uploadBlob.arrayBuffer === 'function') {
-              const buf = Buffer.from(await uploadBlob.arrayBuffer());
-              base64Data = `data:${candidateMime};base64,${buf.toString('base64')}`;
-            }
-            if (base64Data && ENGINE_BEARER_TOKEN) {
-              const resB64 = await fetch(`${FILE_UPLOAD_BASE}/file-base64-upload`, {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${ENGINE_BEARER_TOKEN}`,
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                  base64Data: base64Data,
-                  uploadPath: 'nzembo/audio',
-                  fileName: `${Date.now()}_${candidateName}`
-                })
-              });
-              const jB64 = await resB64.json().catch(() => ({}));
-              const dlB64 = jB64 && (jB64.downloadUrl || jB64.url || (jB64.data && (jB64.data.downloadUrl || jB64.data.fileUrl || jB64.data.url)));
-              if (resB64.ok && dlB64 && /^https?:\/\//i.test(dlB64)) {
-                console.log('✅ [Nzembo Cloud] Fichier audio hébergé via Base64 Upload:', dlB64);
-                return dlB64;
+          if (!uploadBlob.size || uploadBlob.size <= 10 * 1024 * 1024) {
+            try {
+              const b64 = await toBase64DataUrl(uploadBlob, candidateMime);
+              if (b64) {
+                const resB64 = await fetch(`${FILE_UPLOAD_BASE}/file-base64-upload`, {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ base64Data: b64, uploadPath: 'nzembo/audio', fileName: `${Date.now()}_${candidateName}` })
+                });
+                const jB64 = await resB64.json().catch(() => ({}));
+                const dlB64 = jB64 && (jB64.downloadUrl || jB64.url || (jB64.data && (jB64.data.downloadUrl || jB64.data.fileUrl || jB64.data.url)));
+                if (resB64.ok && dlB64 && /^https?:\/\//i.test(dlB64)) return dlB64;
               }
-            }
-          } catch (b64Err) {
-            console.warn('⚠️ [Nzembo Cloud] File Base64 Upload indisponible:', b64Err.message);
+            } catch {}
           }
         }
-
         return null;
       }
 
@@ -2439,31 +2340,19 @@
       }
 
       let remoteUrl = await tryUploadSingleBlob(primaryBlob, primaryName, primaryMime);
-
-      // Si l'envoi direct échoue (ex: conteneur mobile non reconnu), normaliser en WAV universel et réessayer
       if (!remoteUrl && !convertedWavBlob) {
         convertedWavBlob = await transcodeAudioBlobToWav(fileOrBlob);
         if (convertedWavBlob && convertedWavBlob.size > 0) {
-          const wavName = safeName.replace(/\.[^/.]+$/, '') + '.wav';
-          remoteUrl = await tryUploadSingleBlob(convertedWavBlob, wavName, 'audio/wav');
+          remoteUrl = await tryUploadSingleBlob(convertedWavBlob, safeName.replace(/\.[^/.]+$/, '') + '.wav', 'audio/wav');
         }
       }
 
-      if (remoteUrl && /^https?:\/\//i.test(remoteUrl)) {
-        return remoteUrl;
-      }
-
-      if (requireRemoteUrl) {
-        throw new Error('Envoi audio impossible pour le moment. Vérifie ta connexion et réessaie.');
-      }
-
-      if (typeof URL !== 'undefined' && URL.createObjectURL && fileOrBlob instanceof Blob) {
-        return URL.createObjectURL(fileOrBlob);
-      }
+      if (remoteUrl && /^https?:\/\//i.test(remoteUrl)) return remoteUrl;
+      if (requireRemoteUrl) throw new Error('Envoi audio impossible pour le moment. Vérifie ta connexion et réessaie.');
+      if (typeof URL !== 'undefined' && URL.createObjectURL && fileOrBlob instanceof Blob) return URL.createObjectURL(fileOrBlob);
       return '';
     },
 
-    // Photo de profil utilisateur (Supabase Storage + Profil + fallback local)
     updateUserAvatar: async function(fileOrDataUrl) {
       const current = getCurrentUser() || {};
       const userId = current.id || null;
@@ -2472,7 +2361,6 @@
       if (typeof fileOrDataUrl === 'string') {
         finalAvatarUrl = fileOrDataUrl;
       } else if (fileOrDataUrl && typeof Blob !== 'undefined' && fileOrDataUrl instanceof Blob) {
-        // Optimiser l'image en carré 360x360 JPEG côté navigateur
         let uploadCandidate = fileOrDataUrl;
         let dataUrlFallback = '';
         if (typeof document !== 'undefined' && typeof Image !== 'undefined' && typeof URL !== 'undefined') {
@@ -2480,110 +2368,60 @@
             const objUrl = URL.createObjectURL(fileOrDataUrl);
             try {
               const img = await new Promise((resolve, reject) => {
-                const im = new Image();
-                im.onload = () => resolve(im);
-                im.onerror = reject;
-                im.src = objUrl;
+                const im = new Image(); im.onload = () => resolve(im); im.onerror = reject; im.src = objUrl;
               });
               const size = 360;
-              const canvas = document.createElement('canvas');
-              canvas.width = size;
-              canvas.height = size;
+              const canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size;
               const ctx = canvas.getContext('2d');
               const minSide = Math.min(img.naturalWidth || img.width || size, img.naturalHeight || img.height || size);
-              const sx = Math.max(0, ((img.naturalWidth || img.width) - minSide) / 2);
-              const sy = Math.max(0, ((img.naturalHeight || img.height) - minSide) / 2);
-              ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+              ctx.drawImage(img, Math.max(0, ((img.naturalWidth || img.width) - minSide) / 2), Math.max(0, ((img.naturalHeight || img.height) - minSide) / 2), minSide, minSide, 0, 0, size, size);
               dataUrlFallback = canvas.toDataURL('image/jpeg', 0.86);
               uploadCandidate = await new Promise(resolve => canvas.toBlob(b => resolve(b || fileOrDataUrl), 'image/jpeg', 0.86));
-            } finally {
-              URL.revokeObjectURL(objUrl);
-            }
-          } catch (e) {}
+            } finally { URL.revokeObjectURL(objUrl); }
+          } catch {}
         }
-
         const safeFileName = `avatar_${userId || 'user'}_${Date.now()}.jpg`;
         const uploadedUrl = await uploadMediaToSupabase(uploadCandidate, safeFileName, 'avatars').catch(() => null);
-        if (uploadedUrl && /^https?:\/\//i.test(uploadedUrl)) {
-          finalAvatarUrl = uploadedUrl;
-        } else if (dataUrlFallback) {
-          finalAvatarUrl = dataUrlFallback;
-        } else if (typeof FileReader !== 'undefined') {
-          finalAvatarUrl = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(String(reader.result || ''));
-            reader.onerror = reject;
-            reader.readAsDataURL(fileOrDataUrl);
-          });
-        }
+        if (uploadedUrl && /^https?:\/\//i.test(uploadedUrl)) finalAvatarUrl = uploadedUrl;
+        else if (dataUrlFallback) finalAvatarUrl = dataUrlFallback;
       }
 
-      if (!finalAvatarUrl) {
-        throw new Error('Impossible de charger cette image de profil.');
-      }
-
+      if (!finalAvatarUrl) throw new Error('Impossible de charger cette image de profil.');
       saveLocalAvatarForUser(userId, finalAvatarUrl);
-      const updatedUser = { ...current, avatar_url: finalAvatarUrl };
-      setCurrentUser(updatedUser);
-
+      setCurrentUser({ ...current, avatar_url: finalAvatarUrl });
       const sb = getSupabase();
       if (sb && userId && /^[0-9a-f-]{36}$/i.test(String(userId))) {
-        try {
-          await sb.from('profiles').update({ avatar_url: finalAvatarUrl }).eq('id', userId);
-        } catch (e) {}
-        try {
-          await sb.auth.updateUser({ data: { avatar_url: finalAvatarUrl } });
-        } catch (e) {}
+        try { await sb.from('profiles').update({ avatar_url: finalAvatarUrl }).eq('id', userId); } catch {}
+        try { await sb.auth.updateUser({ data: { avatar_url: finalAvatarUrl } }); } catch {}
       }
-
       return finalAvatarUrl;
     },
 
-    // 10b. Capture vocale et gestion des Personas Vocaux (Suno Voice / Voice Persona)
     validateVoiceSample: async function({ voiceUrl, vocalStartS = 0, vocalEndS = 15, language = 'fr', callBackUrl = WEBHOOK_NOOP_URL }) {
-      if (!voiceUrl || !/^https?:\/\//i.test(voiceUrl)) {
-        throw new Error('Une URL audio publique et accessible est requise pour valider votre voix.');
-      }
-      const payload = {
-        voiceUrl,
-        vocalStartS: Number(vocalStartS) || 0,
-        vocalEndS: Math.max(Number(vocalEndS) || 15, (Number(vocalStartS) || 0) + 10),
-        language: language || 'fr',
-        callBackUrl: callBackUrl || WEBHOOK_NOOP_URL
-      };
-      console.log('🎙️ [Nzembo Voice] Validation de l\'extrait vocal...', payload);
+      if (!voiceUrl || !/^https?:\/\//i.test(voiceUrl)) throw new Error('Une URL audio valide est requise.');
       const res = await fetchAudioEngine('/voice/validate', {
         method: 'POST',
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ voiceUrl, vocalStartS: Number(vocalStartS) || 0, vocalEndS: Math.max(Number(vocalEndS) || 15, (Number(vocalStartS) || 0) + 10), language: language || 'fr', callBackUrl })
       });
       const data = await res.json().catch(() => ({}));
       if (!data || data.code !== 200 || !data.data || !data.data.taskId) {
         throw new Error(sanitizeApiErrorMessage(data?.msg || data?.message, 'Impossible d\'initier la validation vocale.'));
       }
-      return data.data; // { taskId: '...' }
+      return data.data;
     },
 
-    createCustomVoice: async function({ taskId, verifyUrl, voiceName = 'Voix Utilisateur', description = 'Voix personnalisée Studio Nzembo', style = 'pop', callBackUrl = WEBHOOK_NOOP_URL }) {
-      if (!taskId) throw new Error('Un identifiant de tâche (taskId) est requis pour créer la voix.');
-      if (!verifyUrl || !/^https?:\/\//i.test(verifyUrl)) throw new Error('Une URL d\'enregistrement de vérification est requise.');
-      const payload = {
-        taskId,
-        verifyUrl,
-        voiceName: (voiceName || 'Voix Nzembo').slice(0, 50),
-        description: (description || 'Voix personnalisée').slice(0, 200),
-        style: style || 'pop',
-        callBackUrl: callBackUrl || WEBHOOK_NOOP_URL
-      };
-      console.log('🎙️ [Nzembo Voice] Création du persona vocal...', payload);
+    createCustomVoice: async function({ taskId, verifyUrl, voiceName = 'Ma Voix', description = 'Voix personnalisée nZembo', style = 'pop', callBackUrl = WEBHOOK_NOOP_URL }) {
+      if (!taskId) throw new Error('Identifiant de tâche requis pour créer la voix.');
+      if (!verifyUrl || !/^https?:\/\//i.test(verifyUrl)) throw new Error('Une URL audio valide est requise.');
       const res = await fetchAudioEngine('/voice/generate', {
         method: 'POST',
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ taskId, verifyUrl, voiceName: (voiceName || 'Voix nZembo').slice(0, 50), description: description.slice(0, 200), style, callBackUrl })
       });
       const data = await res.json().catch(() => ({}));
       if (!data || (data.code !== 200 && data.code !== 409) || !data.data) {
-        throw new Error(sanitizeApiErrorMessage(data?.msg || data?.message, 'Échec du lancement de la création de voix.'));
+        throw new Error(sanitizeApiErrorMessage(data?.msg || data?.message, 'Échec de la création de voix.'));
       }
-      return data.data; // { taskId: '...' }
+      return data.data;
     },
 
     getVoiceRecordInfo: async function(taskId) {
@@ -2591,35 +2429,21 @@
       try {
         const res = await fetchAudioEngine(`/voice/record-info?taskId=${encodeURIComponent(taskId)}`, { method: 'GET' });
         const data = await res.json().catch(() => ({}));
-        if (!data || data.code !== 200) return null;
-        return data.data; // { taskId, voiceId, status, errorCode, errorMessage, validateInfo }
-      } catch (e) {
+        return (data && data.code === 200) ? data.data : null;
+      } catch {
         return null;
       }
     },
 
     createVoicePersonaPipeline: async function({ fileOrBlob, fileName = 'voix_sample.mp3', voiceName = 'Ma Voix', onProgress = () => {} }) {
-      console.log('🚀 [Nzembo Voice Pipeline] Démarrage du pipeline de capture vocale...', { fileName, voiceName });
-      
-      // 1. Upload
       onProgress({ step: 'upload', message: "Téléversement de l'enregistrement vocal...", pct: 20 });
       const publicUrl = await this.uploadLocalAudioFile(fileOrBlob, fileName);
-      if (!publicUrl || !/^https?:\/\//i.test(publicUrl)) {
-        throw new Error("Impossible d'héberger le fichier audio sur le serveur distant.");
-      }
+      if (!publicUrl || !/^https?:\/\//i.test(publicUrl)) throw new Error("Impossible d'envoyer le fichier audio pour le moment.");
 
-      // 2. Initialiser validation
       onProgress({ step: 'validate', message: "Analyse acoustique et validation vocale...", pct: 40 });
-      const valData = await this.validateVoiceSample({
-        voiceUrl: publicUrl,
-        vocalStartS: 0,
-        vocalEndS: 15,
-        language: 'fr'
-      });
+      const valData = await this.validateVoiceSample({ voiceUrl: publicUrl, vocalStartS: 0, vocalEndS: 15, language: 'fr' });
       const valTaskId = valData.taskId;
 
-      // 3. Polling validation acoustique
-      let validateSuccess = false;
       for (let i = 0; i < 15; i++) {
         await new Promise(r => setTimeout(r, 2000));
         const rec = await this.getVoiceRecordInfo(valTaskId);
@@ -2630,26 +2454,16 @@
             return { success: true, voiceId: rec.voiceId, voiceUrl: publicUrl };
           }
           if (st.includes('fail') || (rec.errorCode && rec.errorCode >= 400)) {
-            const err = sanitizeApiErrorMessage(rec.errorMessage, "La vérification vocale a échoué. Assurez-vous d'enregistrer une voix humaine audible et sans bruit parasite.");
-            throw new Error(err);
+            throw new Error(sanitizeApiErrorMessage(rec.errorMessage, "La vérification vocale a échoué."));
           }
-          if (st.includes('success') || rec.validateInfo || st === 'processing_validate_success') {
-            validateSuccess = true;
-            break;
-          }
+          if (st.includes('success') || rec.validateInfo || st === 'processing_validate_success') break;
         }
       }
 
-      // 4. Génération du modèle de voix
-      onProgress({ step: 'generate', message: "Création de votre empreinte vocale (Voice Persona)...", pct: 70 });
-      const genData = await this.createCustomVoice({
-        taskId: valTaskId,
-        verifyUrl: publicUrl,
-        voiceName: voiceName
-      });
+      onProgress({ step: 'generate', message: "Création de ton profil vocal...", pct: 70 });
+      const genData = await this.createCustomVoice({ taskId: valTaskId, verifyUrl: publicUrl, voiceName });
       const genTaskId = (genData && genData.taskId) || valTaskId;
 
-      // 5. Polling final pour l'identifiant vocal
       onProgress({ step: 'finalize', message: "Finalisation et enregistrement du profil vocal...", pct: 90 });
       for (let j = 0; j < 20; j++) {
         await new Promise(r => setTimeout(r, 2500));
@@ -2657,33 +2471,28 @@
         if (rec2) {
           if (rec2.voiceId) {
             onProgress({ step: 'ready', message: "Empreinte vocale validée avec succès !", pct: 100 });
-            return {
-              success: true,
-              voiceId: rec2.voiceId,
-              voiceUrl: publicUrl
-            };
+            return { success: true, voiceId: rec2.voiceId, voiceUrl: publicUrl };
           }
           const st2 = String(rec2.status || '').toLowerCase();
           if (st2.includes('fail') || (rec2.errorCode && rec2.errorCode >= 400)) {
-            throw new Error(sanitizeApiErrorMessage(rec2.errorMessage, "Échec lors de la création de la voix personnalisée."));
+            throw new Error(sanitizeApiErrorMessage(rec2.errorMessage, "Échec lors de la création de la voix."));
           }
         }
       }
-
-      // Renvoyer le genTaskId si le traitement en tâche de fond se prolonge
-      return {
-        success: true,
-        voiceId: genTaskId,
-        voiceUrl: publicUrl,
-        isPending: true
-      };
+      return { success: true, voiceId: genTaskId, voiceUrl: publicUrl, isPending: true };
     },
 
-    // 11. Outils Studio Nzembo vérifiés et conformes (Outils 1 à 12)
     executeStudioTool: async function({ toolKey, inputPrompt, audioUrl, creditCost = 1, options = {} }) {
-      console.log(`🎛️ [Nzembo Studio] Exécution de l'outil ${toolKey}...`, { audioUrl, options });
+      const cost = Math.max(0, Number(creditCost) || 0);
+      if (cost > 0) {
+        const bal = await this.getUserCredits();
+        if (bal < cost) {
+          throw new Error(`Solde insuffisant (${bal} disponible, ${cost} crédit${cost > 1 ? 's' : ''} requis).`);
+        }
+      }
 
-      // 1. REPRISE & REMIX : uploadAndCoverAudio (1 seule version unique)
+      let toolRes = null;
+
       if (toolKey === 'reprise' || toolKey === 'remix') {
         const defaultStyle = toolKey === 'remix' ? 'Amapiano, Afrobeat Club Remix, High Energy Drums' : 'Par défaut';
         const coverResult = await this.uploadAndCoverAudio({
@@ -2693,202 +2502,97 @@
           prompt: inputPrompt,
           lyrics: options.lyrics || inputPrompt || '',
           style: options.style !== undefined ? options.style : defaultStyle,
-          title: options.title || (toolKey === 'remix' ? 'Remix Studio Club' : 'Reprise Studio'),
+          title: options.title || (toolKey === 'remix' ? 'Remix' : 'Reprise'),
           instrumental: false,
           vocalGender: options.vocalGender,
           audioWeight: options.audioWeight,
           model: 'V6'
         });
-        return {
-          ...coverResult,
-          conversionType: 'cover',
-          eta: 75
-        };
-      }
-
-      // 2. CHANTER SUR INSTRUMENTAL : addVocalsToAudio
-      if (toolKey === 'sing_instru') {
+        toolRes = { ...coverResult, conversionType: 'cover', eta: 75 };
+      } else if (toolKey === 'sing_instru') {
         const vocalResult = await this.addVocalsToAudio({
           uploadUrl: audioUrl,
-          title: options.title || 'Chant Studio sur Instrumental',
+          title: options.title || 'Voix sur instrumental',
           style: options.style || 'Afrobeat, Rumba',
           lyrics: options.lyrics || inputPrompt,
           prompt: inputPrompt,
           vocalGender: options.vocalGender,
           model: 'V6'
         });
-        return {
-          ...vocalResult,
-          conversionType: 'generate',
-          eta: 70
-        };
-      }
-
-      // 3. HARMONISATION VOCALE : addInstrumentalToAudio
-      if (toolKey === 'sing_vocal') {
+        toolRes = { ...vocalResult, conversionType: 'generate', eta: 70 };
+      } else if (toolKey === 'sing_vocal') {
         const harmResult = await this.addInstrumentalToAudio({
           uploadUrl: audioUrl,
-          title: options.title || 'Harmonisation Chorale Studio',
+          title: options.title || 'Harmonies vocales',
           tags: options.style || 'Gospel Choir SATB, Rich Vocal Harmonies, Accompagnement Doux',
           negativeTags: 'Heavy Metal, Screaming, Harsh Noise',
           lyrics: options.lyrics || inputPrompt,
           vocalGender: options.vocalGender,
           model: 'V6'
         });
-        return {
-          ...harmResult,
-          conversionType: 'generate',
-          eta: 70
-        };
-      }
-
-      // 4. EXTRACTION STEMS
-      if (toolKey === 'extraction' || toolKey === 'stems') {
-        const type = options.stem === 'all' ? 'split_stem' : 'separate_vocal';
+        toolRes = { ...harmResult, conversionType: 'generate', eta: 70 };
+      } else if (toolKey === 'extraction' || toolKey === 'stems') {
         const stemRes = await this.separateStems({
           taskId: options.taskId,
           audioId: options.audioId,
           audioUrl: audioUrl,
-          type: type
+          type: options.stem === 'all' ? 'split_stem' : 'separate_vocal'
         });
-        return {
-          ...stemRes,
-          conversionType: 'vocal-removal',
-          eta: 45
-        };
-      }
-
-      // 5. EXTEND
-      if (toolKey === 'extend') {
+        toolRes = { ...stemRes, conversionType: 'vocal-removal', eta: 45 };
+      } else if (toolKey === 'extend') {
         const extRes = await this.extendMusic({
           taskId: options.taskId,
           audioId: options.audioId,
           uploadUrl: audioUrl,
           lyrics: options.lyrics || inputPrompt,
           style: options.style || 'Afrobeat, Rumba',
-          title: options.title || 'Extension Studio',
+          title: options.title || 'Prolongement',
           continueAt: options.continueAt || 60,
           model: 'V6'
         });
-        return {
-          ...extRes,
-          conversionType: 'generate',
-          eta: 65
-        };
-      }
-
-      // 5b. POSER L'INSTRUMENTAL SUR LA VOIX (Outil 12) : addInstrumentalToAudio strict (pas de génération instrumentale isolée)
-      if (toolKey === 'instru_on_voice' || toolKey === 'voice_to_instru') {
+        toolRes = { ...extRes, conversionType: 'generate', eta: 65 };
+      } else if (toolKey === 'instru_on_voice' || toolKey === 'voice_to_instru') {
         const styleName = options.style || 'Rumba Congolaise';
-        const instruTitle = (options.title || `Instrumental ${styleName}`).slice(0, 80);
-
         if (!audioUrl || !/^https?:\/\//i.test(audioUrl)) {
-          throw new Error('Veuillez fournir ou téléverser un fichier vocal valide avant de poser l\'instrumental.');
+          throw new Error('Importe ou choisis un fichier vocal valide avant de poser l\'instrumental.');
         }
-
-        // Orchestration riche et adaptée au style musical pour Suno V6
-        const STYLE_TAGS_MAP = {
-          'Rumba Congolaise': 'Rumba Congolaise, Solo Electric Guitar Sebene, Melodic Bass Guitar, Warm Drums, Brass, Congas',
-          'Afrobeat': 'Afrobeat, Groovy Brass Section, Driving Percussions, Warm Bassline, Rhythm Guitar, Afro Pop',
-          'Amapiano': 'Amapiano, Deep Log Drums, Syncopated Jazzy Piano, Shakers, Warm Sub Bass',
-          'Gospel Urbain': 'Urban Gospel, Uplifting Piano, Organ, Dynamic Drums, Rich Bassline, Modern Praise',
-          'Ndombolo': 'Ndombolo, Fast Tempo, High Cadence Sebene Guitars, Atalaku, Heavy Bass, Kinshasa Groove',
-          'Coupé-Décalé': 'Coupe Decale, Fast Dance Beat, Club Synths, Heavy Kicks, Abidjan Party Groove',
-          'Acoustique / Soul': 'Acoustic Soul, Warm Fingerpicking Guitar, Soft Percussion, Upright Bass, Intimate Ambience',
-          'R&B / Soul': 'Smooth R&B, Velvet Rhodes Piano, Warm Bassline, Gentle Trap Soul Drums, Lush Pads',
-          'Zouk / Kizomba': 'Zouk Kizomba, Sensual Tropical Groove, Warm Bass, Smooth Synthesizers, Romantic Flow',
-          'Makossa': 'Makossa, Slap Bass Guitar, Punchy Horn Section, Cameroonian Groove, Upbeat Drums',
-          'Bikutsi': 'Bikutsi, Fast Balafon Rhythms, High Speed Guitar Picking, Energetic Cameroonian Percussion',
-          'Reggae / Dancehall': 'Reggae Dancehall, Heavy Sub Bass, Skank Guitar, Steppers Drums, Dub Atmosphere',
-          'Afro-Trap': 'Afro Trap, 808 Sliding Bass, Danceable Beats, Melodic Guitars, Modern Trap Drums',
-          'Pop Moderne': 'Modern Pop, Catchy Melodic Synth, Driving Pop Drums, Acoustic Accents, Radio Mix',
-          'Hip-Hop / Rap': 'Hip-Hop Boom Bap, Crisp Snare, Punchy Kick, Groovy Bassline, Soul Sample Beats',
-          'Trap / Drill': 'Melodic Trap Drill, Gliding 808 Bass, Crisp Hi-Hats, Dark Melodic Plucks',
-          'Bongo Flava': 'Bongo Flava, East African Melodic Guitar, Smooth Drums, Afro Fusion, Melodic Bass',
-          'Jazz / Blues': 'Mellow Jazz Blues, Smooth Saxophone, Feathery Clean Guitar, Double Bass, Brushed Drums',
-          'Lo-Fi Hip-Hop': 'Lo-Fi Hip Hop, Chill Nostalgic Piano, Vinyl Crackle, Mellow Beats, Warm Lo-Fi Bass'
-        };
-
-        const targetTags = options.tags || STYLE_TAGS_MAP[styleName] || `${styleName}, Full Band Arrangement, Acoustic Guitar, Bass, Drums`;
-
+        let targetTags = options.tags;
+        if (!targetTags && typeof window !== 'undefined' && typeof window.getMusicStyleConfig === 'function') {
+          const cfg = window.getMusicStyleConfig(styleName);
+          if (cfg) targetTags = cfg.sunoStylePrompt || cfg.mandatoryTags;
+        }
         const addInstruRes = await this.addInstrumentalToAudio({
           uploadUrl: audioUrl,
-          title: instruTitle,
-          tags: targetTags,
-          negativeTags: options.negativeTags || 'Distortion, Harsh Noise, Clipping, Low Quality, Out of tune',
+          title: (options.title || `Instrumental ${styleName}`).slice(0, 80),
+          tags: targetTags || `${styleName}, Full Band Arrangement, Acoustic Guitar, Bass, Drums`,
+          negativeTags: options.negativeTags || 'Distortion, Harsh Noise, Clipping, Low Quality',
           lyrics: options.lyrics || '',
           vocalGender: options.vocalGender,
           model: 'V6'
         });
-        return {
-          ...addInstruRes,
-          conversionType: 'generate',
-          eta: 65
-        };
-      }
-
-      // 6. VIDÉO MP4 HD (sans watermark textuel imposé)
-      if (toolKey === 'video' || toolKey === 'mp4') {
+        toolRes = { ...addInstruRes, conversionType: 'generate', eta: 65 };
+      } else if (toolKey === 'video' || toolKey === 'mp4') {
         const vidRes = await this.createMusicVideo({
           taskId: options.taskId,
           audioId: options.audioId,
           audioUrl: audioUrl || options.audioUrl || '',
           title: options.title || inputPrompt || ''
         });
-        return {
-          ...vidRes,
-          conversionType: 'mp4'
-        };
-      }
-
-      // 7. CONVERSION WAV MASTER HD
-      if (toolKey === 'wav') {
-        const wavRes = await this.convertToWav({
-          taskId: options.taskId,
-          audioId: options.audioId
-        });
-        return {
-          ...wavRes,
-          conversionType: 'wav',
-          eta: 30
-        };
-      }
-
-      // 8. CRÉATION POCHETTE D'ALBUM HD (strictement isolée de Mes Créations)
-      if (toolKey === 'cover_art') {
+        toolRes = { ...vidRes, conversionType: 'mp4' };
+      } else if (toolKey === 'wav') {
+        const wavRes = await this.convertToWav({ taskId: options.taskId, audioId: options.audioId });
+        toolRes = { ...wavRes, conversionType: 'wav', eta: 30 };
+      } else if (toolKey === 'cover_art') {
         if (typeof generateHDCoverArt === 'function') {
-          const coverUrl = await generateHDCoverArt({
-            prompt: inputPrompt,
-            title: options.title || '',
-            artist: options.author || ''
-          });
-          return {
-            completed: true,
-            status: 'SUCCESS',
-            coverUrl: coverUrl,
-            conversionType: 'cover_art',
-            title: options.title || '',
-            artist: options.author || ''
-          };
-        }
-        if (options.taskId) {
+          const coverUrl = await generateHDCoverArt({ prompt: inputPrompt, title: options.title || '', artist: options.author || '' });
+          toolRes = { completed: true, status: 'SUCCESS', coverUrl, conversionType: 'cover_art', title: options.title || '', artist: options.author || '' };
+        } else if (options.taskId) {
           const artRes = await this.generateAlbumCover(options.taskId).catch(() => ({}));
-          return {
-            ...artRes,
-            conversionType: 'cover_art',
-            eta: 35
-          };
+          toolRes = { ...artRes, conversionType: 'cover_art', eta: 35 };
+        } else {
+          toolRes = { completed: true, status: 'SUCCESS', coverUrl: '', conversionType: 'cover_art' };
         }
-        return {
-          completed: true,
-          status: 'SUCCESS',
-          coverUrl: '',
-          conversionType: 'cover_art'
-        };
-      }
-
-      // 9. GÉNÉRATEUR DE PAROLES IA (/api/v1/lyrics <= 200 chars + langue stricte)
-      if (toolKey === 'lyrics_gen') {
+      } else if (toolKey === 'lyrics_gen') {
         const lyrRes = await this.generateLyrics({
           prompt: inputPrompt,
           theme: options.theme || inputPrompt,
@@ -2896,45 +2600,43 @@
           language: options.language || '',
           secondaryLanguage: options.secondaryLanguage || ''
         });
-        return {
-          ...lyrRes,
-          conversionType: 'lyrics',
-          eta: 20
-        };
+        return { ...lyrRes, conversionType: 'lyrics', eta: 20 };
+      } else {
+        const genRes = await this.generateMusic({
+          prompt: inputPrompt,
+          style: options.style || 'Rumba congolaise',
+          lyrics: options.lyrics || '',
+          isInstrumental: Boolean(options.isInstrumental),
+          title: options.title || 'Composition nZembo'
+        });
+        return { ...genRes, conversionType: 'generate', eta: 70 };
       }
 
-      // Par défaut : nouvelle génération musicale
-      const genRes = await this.generateMusic({
-        prompt: inputPrompt,
-        style: options.style || 'Rumba congolaise',
-        lyrics: options.lyrics || '',
-        isInstrumental: Boolean(options.isInstrumental),
-        title: options.title || 'Studio Composition'
-      });
-      return {
-        ...genRes,
-        conversionType: 'generate',
-        eta: 70
-      };
+      // Déduire le coût réel en base de données dès acceptation par le moteur
+      if (cost > 0 && toolRes && (toolRes.taskId || toolRes.completed || toolRes.coverUrl)) {
+        const dedId = toolRes.taskId || `${toolKey}_${Date.now()}`;
+        const nextCredits = await this.deductCredits(cost, `Outil Studio : ${toolKey}`, dedId);
+        toolRes.remainingCredits = nextCredits;
+      }
+
+      return toolRes;
     },
 
     pollStudioTask: async function(taskId, toolType = 'generate') {
-      if (toolType === 'vocal-removal' || toolType === 'stem' || toolType === 'extraction') {
-        return await this.pollStemStatus(taskId);
+      let res = null;
+      if (toolType === 'vocal-removal' || toolType === 'stem' || toolType === 'extraction') res = await this.pollStemStatus(taskId);
+      else if (toolType === 'mp4' || toolType === 'video') res = await this.pollMusicVideoStatus(taskId);
+      else if (toolType === 'wav') res = await this.pollWavStatus(taskId);
+      else if (toolType === 'cover_art' || toolType === 'suno_cover') res = await this.pollAlbumCoverStatus(taskId);
+      else if (toolType === 'lyrics') res = await this.pollLyricsStatus(taskId);
+      else res = await this.pollMusicStatus(taskId);
+
+      if (res && res.failed && _taskDeductions[taskId]) {
+        const refund = _taskDeductions[taskId];
+        delete _taskDeductions[taskId];
+        await this.addCredits(refund).catch(() => {});
       }
-      if (toolType === 'mp4' || toolType === 'video') {
-        return await this.pollMusicVideoStatus(taskId);
-      }
-      if (toolType === 'wav') {
-        return await this.pollWavStatus(taskId);
-      }
-      if (toolType === 'cover_art' || toolType === 'suno_cover') {
-        return await this.pollAlbumCoverStatus(taskId);
-      }
-      if (toolType === 'lyrics') {
-        return await this.pollLyricsStatus(taskId);
-      }
-      return await this.pollMusicStatus(taskId);
+      return res;
     }
   };
 })(typeof window !== 'undefined' ? window : global);
