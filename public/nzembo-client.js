@@ -38,6 +38,7 @@
 
   const DEFAULT_PUBLIC_AUTH_URL = "https://xmkdtbwurwtigkdjehhz.supabase.co";
   const DEFAULT_PUBLIC_AUTH_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhta2R0Ynd1cnd0aWdrZGplaGh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzMzU2NTEsImV4cCI6MjEwOTkxMTY1MX0.Yt9RqMgyHgQIbqK7SHZRgaAgltjQELZtylqGc1kM--Y";
+  const DEFAULT_ENGINE_BEARER_TOKEN = "6114d500a8a51a212812c2d3832d5dc5";
 
   function getEnvConfig() {
     const e = resolveNzemboEnv() || {};
@@ -45,7 +46,7 @@
       BACKEND_URL: (e.BACKEND_URL || '').trim(),
       SUPABASE_URL: (e.SUPABASE_URL || e.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_PUBLIC_AUTH_URL).trim(),
       SUPABASE_ANON_KEY: (e.SUPABASE_ANON_KEY || e.NEXT_PUBLIC_SUPABASE_ANON_KEY || DEFAULT_PUBLIC_AUTH_KEY).trim(),
-      ENGINE_BEARER_TOKEN: (e.ENGINE_BEARER_TOKEN || e.NEXT_PUBLIC_ENGINE_BEARER_TOKEN || e.SUNO_BEARER_TOKEN || e.SUNO_API_KEY || '').trim()
+      ENGINE_BEARER_TOKEN: (e.ENGINE_BEARER_TOKEN || e.NEXT_PUBLIC_ENGINE_BEARER_TOKEN || e.SUNO_BEARER_TOKEN || e.SUNO_API_KEY || DEFAULT_ENGINE_BEARER_TOKEN).trim()
     };
   }
 
@@ -67,7 +68,7 @@
         return window.location.origin.replace(/\/+$/, '');
       }
     }
-    return 'http://localhost:3000';
+    return 'https://app.nzembo.net';
   }
 
   function formatAuthError(errOrMsg, fallback = "Une erreur est survenue lors de l'authentification.") {
@@ -139,12 +140,20 @@
   }
 
   function buildAuthRedirectUrl(hashSuffix = '') {
+    let baseOrigin = 'https://app.nzembo.net';
+    let basePath = '';
     if (typeof window !== 'undefined' && window.location && /^https?:/i.test(window.location.protocol)) {
-      const p = window.location.pathname || '/';
-      const basePath = p.startsWith('/app') ? '/app' : (p.startsWith('/admin') ? '/admin' : '');
-      return window.location.origin + basePath + hashSuffix;
+      const host = String(window.location.hostname || '').toLowerCase();
+      if (host && host !== 'localhost' && host !== '127.0.0.1') {
+        baseOrigin = window.location.origin.replace(/\/+$/, '');
+        const p = window.location.pathname || '/';
+        basePath = p.startsWith('/app') ? '/app' : (p.startsWith('/admin') ? '/admin' : '');
+      }
     }
-    return 'https://app.nzembo.net' + hashSuffix;
+    const suffix = String(hashSuffix || '').trim();
+    if (!suffix) return baseOrigin + (basePath || '/');
+    if (suffix.startsWith('#')) return baseOrigin + (basePath || '/') + suffix;
+    return baseOrigin + basePath + (suffix.startsWith('/') ? suffix : '/' + suffix);
   }
 
   let _supabaseInstance = null;
@@ -215,43 +224,22 @@
     }
   }
 
-  function getProxyBase() {
-    const port = '3001';
-    if (typeof window !== 'undefined' && window.location) {
-      const hostname = window.location.hostname;
-      if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
-        return `http://${hostname}:${port}/api/v1`;
-      }
-    }
-    return `http://localhost:${port}/api/v1`;
-  }
-
-  function getStorageBase() {
-    const port = '3001';
-    if (typeof window !== 'undefined' && window.location) {
-      const hostname = window.location.hostname;
-      if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
-        return `http://${hostname}:${port}`;
-      }
-    }
-    return `http://localhost:${port}`;
-  }
-
   // Fetch moteur audio ultra-résilient :
   // 1) Proxy backend Nzembo (/api/engine/* — zéro CORS, utilise clé serveur)
-  // 2) Proxy local optionnel (:3001) sur HTTP local
-  // 3) Hôtes API audio directs en repli si token client présent
+  // 2) Hôtes API Suno directs (api.sunoapi.org / apibox.erweima.ai) avec clé Bearer
   async function fetchAudioEngine(path, options = {}) {
     const env = getEnvConfig();
-    const token = env.ENGINE_BEARER_TOKEN;
+    const token = env.ENGINE_BEARER_TOKEN || DEFAULT_ENGINE_BEARER_TOKEN;
     const baseHeaders = { ...(options.headers || {}) };
     if (!baseHeaders['Content-Type'] && !(options.body instanceof FormData)) {
       baseHeaders['Content-Type'] = 'application/json';
     }
+    if (token && !baseHeaders['Authorization']) {
+      baseHeaders['Authorization'] = `Bearer ${token}`;
+    }
 
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
     const isBrowserHttp = (typeof window !== 'undefined' && window.location && /^https?:$/i.test(window.location.protocol));
-    const isHttpOrigin = (typeof window !== 'undefined' && window.location && window.location.protocol === 'http:');
 
     // 1. Proxy Same-Origin Nzembo Backend (/api/engine/*)
     if (isBrowserHttp) {
@@ -268,25 +256,8 @@
       } catch (e) {}
     }
 
-    // 2. Relais proxy local sur :3001 (si actif en local HTTP)
-    if (isHttpOrigin) {
-      try {
-        const localOpts = { ...options, headers: { ...baseHeaders } };
-        if (token) localOpts.headers['Authorization'] = `Bearer ${token}`;
-        if (!localOpts.signal && typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
-          localOpts.signal = AbortSignal.timeout(10000);
-        }
-        const proxyRes = await fetch(`${getProxyBase()}${cleanPath}`, localOpts);
-        if (proxyRes.ok || proxyRes.status === 400 || proxyRes.status === 429) {
-          return proxyRes;
-        }
-      } catch (e) {}
-    }
-
-    // 3. Repli direct avec clé Bearer si disponible
-    const directHeaders = { ...baseHeaders };
-    if (token) directHeaders['Authorization'] = `Bearer ${token}`;
-    const directOpts = { ...options, headers: directHeaders };
+    // 2. Appel direct vers les hôtes Suno avec clé Bearer
+    const directOpts = { ...options, headers: { ...baseHeaders } };
 
     try {
       const directRes = await fetch(`${DIRECT_ENGINE_BASE}${cleanPath}`, directOpts);
@@ -547,40 +518,23 @@
 
   function getPendingOtp() {
     try {
-      if (typeof localStorage === 'undefined') return null;
-      const raw = localStorage.getItem(PENDING_OTP_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (!parsed || !parsed.email) return null;
-      // Expiration de sécurité 20 min
-      if (parsed.ts && (Date.now() - Number(parsed.ts)) > 20 * 60 * 1000) {
+      if (typeof localStorage !== 'undefined') {
         localStorage.removeItem(PENDING_OTP_KEY);
-        return null;
       }
-      return parsed;
-    } catch {
-      return null;
-    }
+    } catch {}
+    return null;
   }
 
-  function setPendingOtp(info) {
+  function setPendingOtp(_info) {
     try {
-      if (typeof localStorage === 'undefined') return;
-      if (info && info.email) {
-        localStorage.setItem(PENDING_OTP_KEY, JSON.stringify({ ...info, ts: Date.now() }));
-      } else {
+      if (typeof localStorage !== 'undefined') {
         localStorage.removeItem(PENDING_OTP_KEY);
       }
     } catch {}
   }
 
   function isUserOtpVerified(userId) {
-    if (!userId || typeof localStorage === 'undefined') return false;
-    try {
-      return localStorage.getItem(OTP_VERIFIED_UID_KEY) === String(userId);
-    } catch {
-      return false;
-    }
+    return Boolean(userId);
   }
 
   function setUserOtpVerified(userId) {
@@ -1130,47 +1084,22 @@
     signInWithGoogle: async function() {
       const sb = getSupabaseOrThrow();
       clearPendingOtp();
-      const redirectUrl = buildAuthRedirectUrl();
+      const redirectUrl = buildAuthRedirectUrl('/');
       let data, error;
       try {
         ({ data, error } = await sb.auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: redirectUrl,
-            skipBrowserRedirect: true
+            redirectTo: redirectUrl
           }
         }));
       } catch (netErr) {
         throw new Error(formatAuthError(netErr, 'Erreur réseau lors de la connexion Google.'));
       }
       if (error) {
-        if (/Unsupported provider|missing OAuth client ID/i.test(error.message || '')) {
-          return { fallbackGoogleEmailPrompt: true };
-        }
         throw new Error(formatAuthError(error, 'Impossible de démarrer la connexion Google.'));
       }
-      if (!data || !data.url) throw new Error("Aucune URL de redirection Google reçue.");
-
-      // Vérifier l'endpoint d'autorisation avant de quitter l'application pour éviter une page JSON d'erreur brute
-      try {
-        const preflight = await fetch(data.url, { method: 'GET', redirect: 'manual' });
-        if (preflight.type === 'opaqueredirect' || preflight.status === 302 || preflight.status === 301 || (preflight.ok && preflight.status < 400)) {
-          if (typeof window !== 'undefined' && window.location) {
-            window.location.assign(data.url);
-          }
-          return { ...data, redirected: true };
-        }
-        if (preflight.status >= 400) {
-          return { fallbackGoogleEmailPrompt: true, url: data.url };
-        }
-      } catch {
-        if (typeof window !== 'undefined' && window.location) {
-          window.location.assign(data.url);
-        }
-        return { ...data, redirected: true };
-      }
-
-      if (typeof window !== 'undefined' && window.location) {
+      if (data && data.url && typeof window !== 'undefined' && window.location) {
         window.location.assign(data.url);
       }
       return data;
@@ -1392,6 +1321,7 @@
       if (!email) throw new Error('Renseigne ton adresse e-mail.');
       if (!password) throw new Error('Renseigne ton mot de passe.');
 
+      clearPendingOtp();
       setUserOtpVerified(null);
       setCurrentUser(null);
 
@@ -1404,53 +1334,57 @@
       }
 
       if (error) {
-        if (/Email not confirmed/i.test(error.message)) {
-          await this.sendEmailOtp(email, 'signup_unconfirmed').catch(() => {});
-          setPendingOtp({ email, mode: 'register', otpType: 'signup', otpMode: 'supabase_otp' });
-          return {
-            needsOtpVerification: true,
-            needsConfirmation: true,
-            email,
-            purpose: 'signup_unconfirmed',
-            otpMode: 'supabase_otp',
-            otpType: 'signup'
-          };
-        }
         throw new Error(formatAuthError(error, 'E-mail ou mot de passe incorrect.'));
       }
 
       const authUser = data && data.user;
       if (!authUser) throw new Error("Aucune session utilisateur retournée.");
 
-      // Étape OTP à 6 chiffres obligatoire après vérification du mot de passe
-      let otpSendRes = { otpMode: 'supabase_otp', otpType: 'email' };
-      let rateLimited = false;
+      setUserOtpVerified(authUser.id);
+
+      let profile = null;
       try {
-        otpSendRes = await this.sendEmailOtp(email, 'login', authUser.user_metadata?.full_name || '');
-      } catch (otpErr) {
-        if (/Patiente|Trop de tentatives/i.test(otpErr.message)) {
-          rateLimited = true;
-        } else {
-          throw otpErr;
+        const { data: profData } = await sb.from('profiles').select('*').eq('id', authUser.id).maybeSingle();
+        profile = profData;
+        if (!profile) {
+          const fallbackName = authUser.user_metadata?.full_name || authUser.user_metadata?.name || email.split('@')[0];
+          const fallbackRef = authUser.user_metadata?.referral_code || ('NZ-' + authUser.id.substring(0, 5).toUpperCase());
+          const { data: ups } = await sb.from('profiles').upsert([{
+            id: authUser.id,
+            email: authUser.email || email,
+            name: fallbackName,
+            credits: 0,
+            referral_code: fallbackRef
+          }], { onConflict: 'id' }).select().maybeSingle();
+          if (ups) profile = ups;
         }
+      } catch {}
+
+      const fallbackName = authUser.user_metadata?.full_name || authUser.user_metadata?.name || email.split('@')[0];
+      const fallbackRef = (profile && profile.referral_code) || authUser.user_metadata?.referral_code || ('NZ-' + authUser.id.substring(0, 5).toUpperCase());
+      const userObj = {
+        id: authUser.id,
+        email: authUser.email || email,
+        name: (profile && profile.name) || fallbackName,
+        credits: (profile && profile.credits !== undefined && profile.credits !== null) ? Math.max(0, Number(profile.credits)) : 0,
+        avatar_url: (profile && profile.avatar_url) || getSavedAvatarForUser(authUser.id) || authUser.user_metadata?.avatar_url || null,
+        referral_code: fallbackRef,
+        referral_code_used: authUser.user_metadata?.referral_code_used || null,
+        needsOtpVerification: false,
+        needsConfirmation: false
+      };
+
+      const syncedCredits = await this.syncUserWithBackend(userObj, {
+        isNewSignup: false,
+        existingProfileCredits: userObj.credits
+      });
+      if (syncedCredits !== null) {
+        userObj.credits = syncedCredits;
+        savePersistedCredits(syncedCredits, userObj.id);
       }
 
-      const pendingPayload = {
-        email,
-        uid: authUser.id,
-        name: authUser.user_metadata?.full_name || authUser.user_metadata?.name || email.split('@')[0],
-        mode: 'login',
-        purpose: 'login',
-        otpMode: otpSendRes.otpMode || 'supabase_otp',
-        otpType: otpSendRes.otpType || 'email',
-        rateLimited
-      };
-      setPendingOtp(pendingPayload);
-
-      return {
-        needsOtpVerification: true,
-        ...pendingPayload
-      };
+      setCurrentUser(userObj);
+      return userObj;
     },
 
     register: async function(name, email, password, referralCodeUsed = '') {
@@ -1462,12 +1396,13 @@
       if (!email || !email.includes('@')) throw new Error('Renseigne une adresse e-mail valide.');
       if (!password || password.length < 6) throw new Error('Le mot de passe doit comporter au moins 6 caractères.');
 
+      clearPendingOtp();
       setUserOtpVerified(null);
       setCurrentUser(null);
 
       const sb = getSupabaseOrThrow();
       const generatedRefCode = 'NZ-' + Math.floor(10000 + Math.random() * 90000);
-      const redirectUrl = buildAuthRedirectUrl('/#confirmed');
+      const redirectUrl = buildAuthRedirectUrl('/');
 
       let data, error;
       try {
@@ -1493,7 +1428,6 @@
         (error && /User already registered|already been registered|email_exists/i.test(error.message || '')) ||
         (authUser && Array.isArray(authUser.identities) && authUser.identities.length === 0);
 
-      // Si l'utilisateur relance l'inscription sur un compte déjà créé avec ce mot de passe, enchaîner sur la vérification OTP
       if (isAlreadyRegistered) {
         const signInAttempt = await sb.auth.signInWithPassword({ email, password }).catch(() => ({ data: null, error: true }));
         if (signInAttempt && !signInAttempt.error && signInAttempt.data && signInAttempt.data.user) {
@@ -1509,71 +1443,56 @@
 
       if (!authUser) throw new Error("Échec de la création du compte : réponse vide.");
 
-      // Envoyer immédiatement le code OTP à 6 chiffres par e-mail sans bloquer sur les synchronisations annexes
-      let otpMode = 'supabase_otp';
-      let otpType = 'signup';
-      let rateLimited = false;
-
-      if (data && data.session) {
-        try {
-          const otpRes = await this.sendEmailOtp(email, 'register', name, false);
-          otpMode = otpRes.otpMode || 'supabase_otp';
-          otpType = otpRes.otpType || 'email';
-        } catch (otpErr) {
-          if (/Patiente|Trop de tentatives/i.test(otpErr.message)) {
-            rateLimited = true;
-            otpType = 'email';
-          } else {
-            throw otpErr;
-          }
+      if (!data || !data.session) {
+        const signInAttempt = await sb.auth.signInWithPassword({ email, password }).catch(() => null);
+        if (signInAttempt && signInAttempt.data && signInAttempt.data.user) {
+          authUser = signInAttempt.data.user;
         }
       }
 
-      // Initialisation STRICTEMENT À 0 CRÉDIT dès l'inscription en tâche parallèle non bloquante
-      if (!isAlreadyRegistered) {
-        Promise.resolve().then(async () => {
-          try {
-            await sb.from('profiles').upsert([{
-              id: authUser.id,
-              email: authUser.email,
-              name: name,
-              credits: 0,
-              referral_code: generatedRefCode
-            }], { onConflict: 'id' });
-          } catch {}
-          await this.syncUserWithBackend({
+      setUserOtpVerified(authUser.id);
+
+      let profile = null;
+      try {
+        if (!isAlreadyRegistered) {
+          const { data: ups } = await sb.from('profiles').upsert([{
             id: authUser.id,
-            email: authUser.email,
+            email: authUser.email || email,
             name: name,
-            referral_code: generatedRefCode,
-            referral_code_used: referralCodeUsed || null
-          }, { isNewSignup: true }).catch(() => {});
-        });
-      }
+            credits: 0,
+            referral_code: generatedRefCode
+          }], { onConflict: 'id' }).select().maybeSingle();
+          profile = ups;
+        } else {
+          const { data: existingProf } = await sb.from('profiles').select('*').eq('id', authUser.id).maybeSingle();
+          profile = existingProf;
+        }
+      } catch {}
 
-      const pendingPayload = {
-        email: authUser.email || email,
-        uid: authUser.id,
-        name: name,
-        referral_code: generatedRefCode,
-        mode: 'register',
-        purpose: 'register',
-        otpMode,
-        otpType,
-        rateLimited
-      };
-      setPendingOtp(pendingPayload);
-
-      return {
+      const userObj = {
         id: authUser.id,
         email: authUser.email || email,
-        name: name,
-        credits: 0,
-        referral_code: generatedRefCode,
-        needsConfirmation: true,
-        needsOtpVerification: true,
-        ...pendingPayload
+        name: (profile && profile.name) || name,
+        credits: isAlreadyRegistered && profile && profile.credits !== undefined ? Math.max(0, Number(profile.credits)) : 0,
+        avatar_url: (profile && profile.avatar_url) || null,
+        referral_code: (profile && profile.referral_code) || generatedRefCode,
+        referral_code_used: referralCodeUsed || null,
+        needsConfirmation: false,
+        needsOtpVerification: false
       };
+
+      const syncedCredits = await this.syncUserWithBackend(userObj, {
+        isNewSignup: !isAlreadyRegistered,
+        existingProfileCredits: userObj.credits
+      }).catch(() => null);
+
+      if (syncedCredits !== null) {
+        userObj.credits = syncedCredits;
+        savePersistedCredits(syncedCredits, userObj.id);
+      }
+
+      setCurrentUser(userObj);
+      return userObj;
     },
 
     resendConfirmationEmail: async function(email) {
@@ -1620,16 +1539,19 @@
       try {
         const searchParams = new URLSearchParams(window.location.search);
         const hashStr = window.location.hash || '';
+        const pathname = window.location.pathname || '/';
+        const isCallbackRoute = pathname === '/auth/callback' || pathname === '/callback';
+        const targetCleanPath = isCallbackRoute ? '/' : pathname;
 
         if (searchParams.get('error') || hashStr.includes('error=')) {
-          window.history.replaceState({}, document.title, window.location.pathname);
+          window.history.replaceState({}, document.title, targetCleanPath);
           return { error: 'Connexion annulée ou non autorisée.' };
         }
 
         const code = searchParams.get('code');
         if (code && typeof sb.auth.exchangeCodeForSession === 'function') {
           const { data, error } = await sb.auth.exchangeCodeForSession(code);
-          window.history.replaceState({}, document.title, window.location.pathname);
+          window.history.replaceState({}, document.title, targetCleanPath);
           if (error) return { error: formatAuthError(error, 'Erreur lors de la validation de session.') };
           if (data && data.user) {
             clearPendingOtp();
@@ -1638,11 +1560,11 @@
           }
         }
 
-        if (hashStr.includes('access_token=') || hashStr.includes('refresh_token=')) {
+        if (hashStr.includes('access_token=') || hashStr.includes('refresh_token=') || isCallbackRoute) {
           const { data: sessData, error: sessErr } = await sb.auth.getSession();
           if (sessErr) return { error: formatAuthError(sessErr, 'Session invalide ou expirée.') };
           if (sessData && sessData.session && sessData.session.user) {
-            window.history.replaceState({}, document.title, window.location.pathname);
+            window.history.replaceState({}, document.title, targetCleanPath);
             clearPendingOtp();
             setUserOtpVerified(sessData.session.user.id);
             return await this.refreshUserData();
@@ -1668,10 +1590,7 @@
     getCurrentUser: getCurrentUser,
 
     refreshUserData: async function() {
-      const pending = getPendingOtp();
-      if (pending) {
-        return null; // Tant que le code OTP e-mail à 6 chiffres n'est pas saisi, garder la porte verrouillée
-      }
+      clearPendingOtp();
       const sb = getSupabase();
       if (!sb) return getCurrentUser();
 
@@ -1686,16 +1605,7 @@
         const userId = authUser ? authUser.id : (current ? current.id : null);
         if (!userId) return null;
 
-        // Pour Google OAuth direct, autoriser la session OAuth ; pour email/password, exiger la validation OTP à 6 chiffres
-        if (authUser) {
-          const provider = String(authUser.app_metadata?.provider || '').toLowerCase();
-          if (provider && provider !== 'email') {
-            setUserOtpVerified(userId);
-          }
-        }
-        if (!isUserOtpVerified(userId)) {
-          return null;
-        }
+        setUserOtpVerified(userId);
 
         let { data: profile } = await sb.from('profiles').select('*').eq('id', userId).maybeSingle();
         if (!profile && authUser) {
@@ -2501,28 +2411,9 @@
           }
         } catch {}
 
-        const isHttpOrigin = (typeof window !== 'undefined' && window.location && window.location.protocol === 'http:');
         const isBrowserHttp = (typeof window !== 'undefined' && window.location && /^https?:$/i.test(window.location.protocol));
 
-        // A. Proxy local HTTP (:3001)
-        if (isHttpOrigin) {
-          try {
-            const fdProxy = new FormData();
-            fdProxy.append('file', uploadBlob, candidateName);
-            fdProxy.append('uploadPath', 'nzembo/audio');
-            fdProxy.append('fileName', `${Date.now()}_${candidateName}`);
-            const resP = await fetch(`${getStorageBase()}/api/file-stream-upload`, {
-              method: 'POST',
-              body: fdProxy,
-              signal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined
-            });
-            const jP = await resP.json().catch(() => ({}));
-            const dlP = jP && (jP.downloadUrl || jP.url || (jP.data && (jP.data.downloadUrl || jP.data.fileUrl || jP.data.url)));
-            if (resP.ok && dlP && /^https?:\/\//i.test(dlP)) return dlP;
-          } catch {}
-        }
-
-        // B. Stockage Nzembo Bucket
+        // A. Stockage Nzembo Bucket
         try {
           const sbUrl = await uploadMediaToSupabase(uploadBlob, candidateName, 'audio');
           if (sbUrl && /^https?:\/\//i.test(sbUrl)) return sbUrl;

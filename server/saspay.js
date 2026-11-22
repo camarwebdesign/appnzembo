@@ -260,7 +260,7 @@ async function computeAuthoritativeOrder({ pack_id, pack_name, credits, currency
 }
 
 function sanitizeFrontendReturnUrl(rawUrl) {
-  const defaultAppUrl = (process.env.APP_URL || 'http://localhost:3001').replace(/\/+$/, '');
+  const defaultAppUrl = (process.env.APP_URL || 'https://app.nzembo.net').replace(/\/+$/, '');
   if (!rawUrl || typeof rawUrl !== 'string') return defaultAppUrl;
 
   try {

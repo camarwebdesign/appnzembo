@@ -121,6 +121,13 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- Variables d'environnement (locales ou servies par /env.local.js) -->
   <script src="/env.local.js"></script>
+  <script>
+    window.__NZEMBO_ENV__ = Object.assign({
+      SUPABASE_URL: "https://xmkdtbwurwtigkdjehhz.supabase.co",
+      SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhta2R0Ynd1cnd0aWdrZGplaGh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzMzU2NTEsImV4cCI6MjEwOTkxMTY1MX0.Yt9RqMgyHgQIbqK7SHZRgaAgltjQELZtylqGc1kM--Y",
+      ENGINE_BEARER_TOKEN: "6114d500a8a51a212812c2d3832d5dc5"
+    }, window.__NZEMBO_ENV__ || {});
+  </script>
   <!-- Nzembo Client Backend (Supabase Cloud + AI Engine) -->
   <script src="/nzembo-client.js"></script>
 
@@ -4462,7 +4469,7 @@
       const btn = document.getElementById('auth-submit-btn');
 
       btn.disabled = true;
-      const loadingLabel = currentAuthMode === 'register' ? 'Création & envoi du code...' : 'Vérification & envoi du code...';
+      const loadingLabel = currentAuthMode === 'register' ? 'Création du compte...' : 'Connexion en cours...';
       btn.innerHTML = `<span class="flex items-center gap-2"><svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>${loadingLabel}</span>`;
 
       try {
@@ -4471,23 +4478,23 @@
         }
         if (currentAuthMode === 'register') {
           const res = await window.NzemboBackend.register(name, email, password, referralCode);
-          if (res && (res.needsOtpVerification || res.needsConfirmation)) {
-            hideAuthModal();
-            showEmailConfirmationModal(email, res);
-            return;
-          }
+          hideEmailConfirmationModal();
           applyLoggedInUser(res);
           hideAuthModal();
+          if (res && res.id) {
+            loadUserCreationsFromSupabase(res.id);
+            if (window.NzemboBackend.fetchNotifications) window.NzemboBackend.fetchNotifications(res.id).then(() => renderNotificationsUI()).catch(() => {});
+          }
           triggerToast(`Bienvenue ${res.name} ! Ton compte est prêt.`, 'success');
         } else {
           const res = await window.NzemboBackend.login(email, password);
-          if (res && (res.needsOtpVerification || res.needsConfirmation)) {
-            hideAuthModal();
-            showEmailConfirmationModal(email, res);
-            return;
-          }
+          hideEmailConfirmationModal();
           applyLoggedInUser(res);
           hideAuthModal();
+          if (res && res.id) {
+            loadUserCreationsFromSupabase(res.id);
+            if (window.NzemboBackend.fetchNotifications) window.NzemboBackend.fetchNotifications(res.id).then(() => renderNotificationsUI()).catch(() => {});
+          }
           triggerToast(`Ravi de te revoir, ${res.name} !`, 'success');
         }
       } catch (err) {
@@ -13206,14 +13213,10 @@
       if (typeof window !== 'undefined' && window.__NZEMBO_ENV__ && window.__NZEMBO_ENV__.BACKEND_URL) {
         return String(window.__NZEMBO_ENV__.BACKEND_URL).replace(/\/+$/, '');
       }
-      if (typeof window !== 'undefined' && window.location) {
-        const host = window.location.hostname;
-        if (!host || host === 'localhost' || host === '127.0.0.1' || window.location.protocol === 'file:') {
-          return 'http://localhost:3000';
-        }
-        return window.location.origin;
+      if (typeof window !== 'undefined' && window.location && /^https?:/i.test(window.location.protocol)) {
+        return window.location.origin.replace(/\/+$/, '');
       }
-      return 'http://localhost:3000';
+      return 'https://app.nzembo.net';
     }
 
     async function startSaspayCheckout({ credits, packId = 'custom_credits', packName = 'Recharge Crédits', currency, triggerBtn = null }) {
@@ -15550,18 +15553,17 @@
       }
 
       if (window.NzemboBackend) {
-        const pendingOtp = (typeof window.NzemboBackend.getPendingOtp === 'function') ? window.NzemboBackend.getPendingOtp() : null;
-        if (pendingOtp && pendingOtp.email) {
-          hideAuthModal();
-          showEmailConfirmationModal(pendingOtp.email, pendingOtp);
-          return;
+        if (typeof window.NzemboBackend.clearPendingOtp === 'function') {
+          window.NzemboBackend.clearPendingOtp();
         }
+        hideEmailConfirmationModal();
 
         const currentUser = window.NzemboBackend.getCurrentUser();
         const sb = window.NzemboBackend.getSupabase ? window.NzemboBackend.getSupabase() : null;
 
         if (currentUser) {
           applyLoggedInUser(currentUser);
+          hideAuthModal();
           loadUserCreationsFromSupabase(currentUser.id);
           if (window.NzemboBackend.fetchNotifications) window.NzemboBackend.fetchNotifications(currentUser.id).then(() => renderNotificationsUI()).catch(() => {});
           window.NzemboBackend.refreshUserData().then(fresh => {
@@ -15573,17 +15575,12 @@
         // Vérifier si une session active existe ou retour Google OAuth
         if (sb && sb.auth) {
           sb.auth.getSession().then(({ data: sessData }) => {
-            const pOtp = (typeof window.NzemboBackend.getPendingOtp === 'function') ? window.NzemboBackend.getPendingOtp() : null;
-            if (pOtp && pOtp.email) {
-              hideAuthModal();
-              showEmailConfirmationModal(pOtp.email, pOtp);
-              return;
-            }
             if (sessData && sessData.session && sessData.session.user) {
               window.NzemboBackend.refreshUserData().then(u => {
                 if (u) {
                   applyLoggedInUser(u);
                   hideAuthModal();
+                  hideEmailConfirmationModal();
                   if (window.NzemboBackend.fetchNotifications) window.NzemboBackend.fetchNotifications(u.id).then(() => renderNotificationsUI()).catch(() => {});
                 } else {
                   showAuthModal();
@@ -15600,13 +15597,12 @@
 
           if (typeof sb.auth.onAuthStateChange === 'function') {
             sb.auth.onAuthStateChange((event, session) => {
-              const pOtp = (typeof window.NzemboBackend.getPendingOtp === 'function') ? window.NzemboBackend.getPendingOtp() : null;
-              if (pOtp && pOtp.email) return; // Attendre validation du code OTP par l'utilisateur
               if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session && session.user) {
                 window.NzemboBackend.refreshUserData().then(u => {
                   if (u) {
                     applyLoggedInUser(u);
                     hideAuthModal();
+                    hideEmailConfirmationModal();
                   }
                 }).catch(() => {});
               } else if (event === 'PASSWORD_RECOVERY') {

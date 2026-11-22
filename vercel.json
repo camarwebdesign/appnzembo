@@ -23,20 +23,24 @@
   ],
   "rewrites": [
     {
-      "source": "/env.local.js",
-      "destination": "/api/env.js"
-    },
-    {
       "source": "/api/env",
-      "destination": "/api/env.js"
+      "destination": "/api/env"
     },
     {
       "source": "/api/(.*)",
-      "destination": "/api/index.js"
+      "destination": "/api/index"
     },
     {
       "source": "/public/(.*)",
       "destination": "/$1"
+    },
+    {
+      "source": "/auth/callback",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/callback",
+      "destination": "/app.html"
     },
     {
       "source": "/app",

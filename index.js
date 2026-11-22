@@ -29,7 +29,7 @@ app.get('/env.local.js', (_req, res) => {
       process.env.NEXT_PUBLIC_ENGINE_BEARER_TOKEN ||
       process.env.SUNO_BEARER_TOKEN ||
       process.env.SUNO_API_KEY ||
-      ''
+      '6114d500a8a51a212812c2d3832d5dc5'
     ).trim()
   };
   res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
@@ -66,7 +66,7 @@ if (!backendServer) {
   // Garantir que le proxy moteur audio reste opérationnel même sans DATABASE_URL
   const SUNO_HOSTS = ['https://api.sunoapi.org/api/v1', 'https://apibox.erweima.ai/api/v1'];
   app.all('/api/engine/*', async (req, res) => {
-    const key = (process.env.SUNO_API_KEY || process.env.SUNO_BEARER_TOKEN || process.env.ENGINE_BEARER_TOKEN || '').trim();
+    const key = (process.env.SUNO_API_KEY || process.env.SUNO_BEARER_TOKEN || process.env.ENGINE_BEARER_TOKEN || '6114d500a8a51a212812c2d3832d5dc5').trim();
     if (!key) return res.status(500).json({ code: 500, msg: 'Clé moteur non configurée.' });
     const subPath = String(req.originalUrl || req.url).replace(/^\/api\/engine/, '') || '/';
     const cleanSub = subPath.startsWith('/') ? subPath : `/${subPath}`;
@@ -120,7 +120,7 @@ app.get(['/public/:asset', '/app/:asset'], (req, res, next) => {
 });
 
 app.use(express.static(PUBLIC_DIR, { index: false }));
-app.get(['/', '/app', '/app/*'], sendAppView);
+app.get(['/', '/auth/callback', '/callback', '/app', '/app/*'], sendAppView);
 
 app.get('*', (req, res, next) => {
   if (!req.path.startsWith('/api/') && !path.extname(req.path)) {

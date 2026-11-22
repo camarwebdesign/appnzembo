@@ -9,7 +9,7 @@ module.exports = function handler(_req, res) {
       process.env.NEXT_PUBLIC_ENGINE_BEARER_TOKEN ||
       process.env.SUNO_BEARER_TOKEN ||
       process.env.SUNO_API_KEY ||
-      ''
+      '6114d500a8a51a212812c2d3832d5dc5'
     ).trim()
   };
 
