@@ -1,4 +1,4 @@
-// nzembo-client.js - Moteur client autonome nZembo Full-Stack
+// nzembo-client.js - Moteur client autonome Nzembo Full-Stack
 // Intégration complète : Auth OTP & OAuth, Base PostgreSQL unifiée, Stockage média,
 // Crédits autoritaires (0 à l'inscription) & Proxy Moteur Audio IA Multi-Outils.
 
@@ -56,6 +56,7 @@
   const WEBHOOK_NOOP_URL = "https://nzembo.net/api/webhook-noop";
   const SESSION_KEY = 'nzembo_auth_user';
   const PENDING_OTP_KEY = 'nzembo_pending_otp';
+  const OTP_VERIFIED_UID_KEY = 'nzembo_otp_verified_uid';
 
   function getBackendApiBase() {
     const env = getEnvConfig();
@@ -97,10 +98,10 @@
       return "Erreur base de données lors de la création de ton profil.";
     }
     if (/Invalid API key|No API key found|apikey/i.test(str)) {
-      return "Configuration d'authentification nZembo manquante côté serveur.";
+      return "Configuration d'authentification Nzembo manquante côté serveur.";
     }
     if (/failed to fetch|networkerror|network error|load failed|err_network|timeout/i.test(str)) {
-      return "Impossible de joindre le serveur nZembo. Vérifie ta connexion internet.";
+      return "Impossible de joindre le serveur Nzembo. Vérifie ta connexion internet.";
     }
     if (/access_denied|user_cancelled|cancelled/i.test(str)) {
       return "Connexion Google annulée.";
@@ -108,7 +109,7 @@
 
     const cleaned = str
       .replace(/https?:\/\/[^\s"'<>]*/gi, '')
-      .replace(/\b(?:supabase|postgres|postgresql|neon|jwt)\b/gi, 'nZembo')
+      .replace(/\b(?:supabase|postgres|postgresql|neon|jwt)\b/gi, 'Nzembo')
       .replace(/\s{2,}/g, ' ')
       .trim();
     if (cleaned) return statusCode && cleaned === str ? `${cleaned} (Code ${statusCode})` : cleaned;
@@ -161,7 +162,7 @@
     }
     const env = getEnvConfig();
     if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
-      _supabaseInitError = 'Configuration du service d\'authentification nZembo introuvable.';
+      _supabaseInitError = 'Configuration du service d\'authentification Nzembo introuvable.';
       return null;
     }
     if (typeof window !== 'undefined') {
@@ -181,7 +182,7 @@
           _supabaseInitError = 'Initialisation du module de connexion échouée : ' + (e && e.message ? e.message : 'erreur');
         }
       } else {
-        _supabaseInitError = "Le module d'authentification nZembo n'a pas pu se charger (vérifie ta connexion internet).";
+        _supabaseInitError = "Le module d'authentification Nzembo n'a pas pu se charger (vérifie ta connexion internet).";
       }
     }
     if (typeof require !== 'undefined') {
@@ -198,7 +199,7 @@
   function getSupabaseOrThrow() {
     const sb = getSupabase();
     if (!sb) {
-      throw new Error(_supabaseInitError || 'Service d\'authentification nZembo indisponible : vérifie ta connexion internet.');
+      throw new Error(_supabaseInitError || 'Service d\'authentification Nzembo indisponible : vérifie ta connexion internet.');
     }
     return sb;
   }
@@ -237,7 +238,7 @@
   }
 
   // Fetch moteur audio ultra-résilient :
-  // 1) Proxy backend nZembo (/api/engine/* — zéro CORS, utilise clé serveur)
+  // 1) Proxy backend Nzembo (/api/engine/* — zéro CORS, utilise clé serveur)
   // 2) Proxy local optionnel (:3001) sur HTTP local
   // 3) Hôtes API audio directs en repli si token client présent
   async function fetchAudioEngine(path, options = {}) {
@@ -252,7 +253,7 @@
     const isBrowserHttp = (typeof window !== 'undefined' && window.location && /^https?:$/i.test(window.location.protocol));
     const isHttpOrigin = (typeof window !== 'undefined' && window.location && window.location.protocol === 'http:');
 
-    // 1. Proxy Same-Origin nZembo Backend (/api/engine/*)
+    // 1. Proxy Same-Origin Nzembo Backend (/api/engine/*)
     if (isBrowserHttp) {
       try {
         const backendBase = getBackendApiBase();
@@ -573,6 +574,26 @@
     } catch {}
   }
 
+  function isUserOtpVerified(userId) {
+    if (!userId || typeof localStorage === 'undefined') return false;
+    try {
+      return localStorage.getItem(OTP_VERIFIED_UID_KEY) === String(userId);
+    } catch {
+      return false;
+    }
+  }
+
+  function setUserOtpVerified(userId) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      if (userId) {
+        localStorage.setItem(OTP_VERIFIED_UID_KEY, String(userId));
+      } else {
+        localStorage.removeItem(OTP_VERIFIED_UID_KEY);
+      }
+    } catch {}
+  }
+
   function clearPendingOtp() {
     setPendingOtp(null);
   }
@@ -580,10 +601,14 @@
   function getCurrentUser() {
     try {
       if (typeof localStorage !== 'undefined') {
+        if (getPendingOtp()) return null;
         const stored = localStorage.getItem(SESSION_KEY);
         if (stored) {
           const parsed = JSON.parse(stored);
-          if (parsed && typeof parsed === 'object') {
+          if (parsed && typeof parsed === 'object' && parsed.id) {
+            if (!isUserOtpVerified(parsed.id)) {
+              return null;
+            }
             const persisted = getPersistedCredits(parsed.id, null);
             if (persisted !== null) {
               parsed.credits = persisted;
@@ -665,8 +690,8 @@
       task_id: creation.taskId || creationId,
       audio_id: creation.audioId || null,
       audio_id_2: creation.audioId2 || null,
-      title: (creation.title || 'Création nZembo').slice(0, 150),
-      artist: (creation.artist || 'nZembo').slice(0, 100),
+      title: (creation.title || 'Création Nzembo').slice(0, 150),
+      artist: (creation.artist || 'Nzembo').slice(0, 100),
       style: (creation.style || '').slice(0, 200),
       tool_category: creation.toolCategory || 'generation',
       recipient: creation.recipient || null,
@@ -731,26 +756,62 @@
 
   async function getUserCreations(userId) {
     const sb = getSupabase();
-    if (!sb) return [];
     try {
       const activeUser = getCurrentUser();
-      const effectiveUserId = (userId && typeof userId === 'string' && userId.includes('-'))
-        ? userId
-        : (activeUser && activeUser.id && String(activeUser.id).includes('-') ? activeUser.id : null);
+      const effectiveUserId = (userId && typeof userId === 'string' && userId.trim())
+        ? userId.trim()
+        : (activeUser && activeUser.id ? String(activeUser.id).trim() : null);
+
+      // Isolation stricte par utilisateur : sans session vérifiée, retourner une liste vide
+      if (!effectiveUserId || !isUserOtpVerified(effectiveUserId)) {
+        return [];
+      }
 
       let rows = [];
-      if (effectiveUserId) {
+      if (sb && effectiveUserId.includes('-')) {
         const { data, error } = await sb.from('creations').select('*')
-          .or(`user_id.eq.${effectiveUserId},user_id.is.null`)
+          .eq('user_id', effectiveUserId)
           .order('created_at', { ascending: false });
-        if (!error && Array.isArray(data) && data.length > 0) rows = data;
+        if (!error && Array.isArray(data)) {
+          rows = data.filter(r => r && String(r.user_id) === String(effectiveUserId));
+        }
       }
 
-      if (!rows || rows.length === 0) {
-        const { data: allData, error: allErr } = await sb.from('creations').select('*').order('created_at', { ascending: false }).limit(200);
-        if (allErr) return [];
-        rows = allData || [];
-      }
+      // Compléter avec les créations de cet utilisateur exact enregistrées sur PostgreSQL Neon
+      try {
+        const neonRes = await fetch(`${getBackendApiBase()}/api/songs/user/${encodeURIComponent(effectiveUserId)}`);
+        const neonJson = await neonRes.json().catch(() => ({}));
+        if (neonRes.ok && Array.isArray(neonJson.songs) && neonJson.songs.length > 0) {
+          const seenIds = new Set(rows.map(r => String(r.id || r.task_id)));
+          for (const ns of neonJson.songs) {
+            if (!ns || String(ns.user_id) !== String(effectiveUserId)) continue;
+            const key = String(ns.id || ns.task_id);
+            if (!seenIds.has(key)) {
+              seenIds.add(key);
+              rows.push({
+                id: ns.id,
+                user_id: ns.user_id,
+                task_id: ns.task_id || ns.id,
+                audio_id: ns.audio_id || ns.id,
+                title: ns.title || 'Chanson Nzembo',
+                artist: 'Nzembo',
+                style: ns.style || '',
+                tool_category: ns.tool_category || 'generation',
+                recipient: ns.recipient || '',
+                occasion: ns.occasion || '',
+                lyrics: ns.lyrics || '',
+                audio_url: ns.audio_url || '',
+                video_url: ns.video_url || '',
+                cover_url: ns.cover_url || '',
+                album_cover: ns.cover_url || '',
+                status: ns.status === 'completed' ? 'termine' : (ns.status === 'processing' ? 'en_cours' : ns.status),
+                is_processing: ns.status === 'processing',
+                created_at: ns.created_at
+              });
+            }
+          }
+        }
+      } catch {}
 
       return rows.map(row => {
         const meta = (row.metadata && typeof row.metadata === 'object') ? row.metadata : {};
@@ -760,11 +821,12 @@
         const rawCat = String(row.tool_category || row.category || meta.toolCategory || (resolvedVideoUrl && !resolvedAudioUrl ? 'video' : 'generation')).toLowerCase().trim();
         return {
           id: row.id,
+          userId: row.user_id || effectiveUserId,
           taskId: row.task_id || row.id,
           audioId: row.audio_id || row.id,
           audioId2: row.audio_id_2 || '',
-          title: row.title || 'Chanson nZembo',
-          artist: row.artist || 'nZembo',
+          title: row.title || 'Chanson Nzembo',
+          artist: row.artist || 'Nzembo',
           style: row.style || '',
           toolCategory: rawCat,
           category: rawCat,
@@ -1008,7 +1070,63 @@
     deleteCreation: deleteCreation,
     uploadMediaToSupabase: uploadMediaToSupabase,
 
-    // ================= AUTHENTIFICATION & OTP E-MAIL =================
+    // ================= EXPLORER PUBLIC & PARTAGÉ =================
+    getExplorerPosts: async function() {
+      try {
+        const res = await fetch(`${getBackendApiBase()}/api/explorer`);
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.success && Array.isArray(json.posts)) {
+          return json.posts;
+        }
+      } catch {}
+      return null;
+    },
+
+    publishExplorerPost: async function(post) {
+      if (!post) return null;
+      try {
+        const res = await fetch(`${getBackendApiBase()}/api/explorer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(post)
+        });
+        return await res.json().catch(() => ({}));
+      } catch {
+        return null;
+      }
+    },
+
+    likeExplorerPost: async function(postId, delta = 1) {
+      if (!postId) return null;
+      try {
+        const res = await fetch(`${getBackendApiBase()}/api/explorer/${encodeURIComponent(postId)}/like`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ delta })
+        });
+        return await res.json().catch(() => ({}));
+      } catch {
+        return null;
+      }
+    },
+
+    listenExplorerPost: async function(postId) {
+      if (!postId) return null;
+      try {
+        const res = await fetch(`${getBackendApiBase()}/api/explorer/${encodeURIComponent(postId)}/listen`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        return await res.json().catch(() => ({}));
+      } catch {
+        return null;
+      }
+    },
+
+    // ================= AUTHENTIFICATION & OTP E-MAIL (6 CHIFFRES) =================
+    isUserOtpVerified: isUserOtpVerified,
+    setUserOtpVerified: setUserOtpVerified,
+
     signInWithGoogle: async function() {
       const sb = getSupabaseOrThrow();
       clearPendingOtp();
@@ -1017,21 +1135,119 @@
       try {
         ({ data, error } = await sb.auth.signInWithOAuth({
           provider: 'google',
-          options: { redirectTo: redirectUrl }
+          options: {
+            redirectTo: redirectUrl,
+            skipBrowserRedirect: true
+          }
         }));
       } catch (netErr) {
         throw new Error(formatAuthError(netErr, 'Erreur réseau lors de la connexion Google.'));
       }
-      if (error) throw new Error(formatAuthError(error, 'Impossible de démarrer la connexion Google.'));
+      if (error) {
+        if (/Unsupported provider|missing OAuth client ID/i.test(error.message || '')) {
+          return { fallbackGoogleEmailPrompt: true };
+        }
+        throw new Error(formatAuthError(error, 'Impossible de démarrer la connexion Google.'));
+      }
       if (!data || !data.url) throw new Error("Aucune URL de redirection Google reçue.");
+
+      // Vérifier l'endpoint d'autorisation avant de quitter l'application pour éviter une page JSON d'erreur brute
+      try {
+        const preflight = await fetch(data.url, { method: 'GET', redirect: 'manual' });
+        if (preflight.type === 'opaqueredirect' || preflight.status === 302 || preflight.status === 301 || (preflight.ok && preflight.status < 400)) {
+          if (typeof window !== 'undefined' && window.location) {
+            window.location.assign(data.url);
+          }
+          return { ...data, redirected: true };
+        }
+        if (preflight.status >= 400) {
+          return { fallbackGoogleEmailPrompt: true, url: data.url };
+        }
+      } catch {
+        if (typeof window !== 'undefined' && window.location) {
+          window.location.assign(data.url);
+        }
+        return { ...data, redirected: true };
+      }
+
+      if (typeof window !== 'undefined' && window.location) {
+        window.location.assign(data.url);
+      }
       return data;
     },
 
-    sendEmailOtp: async function(email, purpose = 'auth', userName = '') {
+    startGoogleEmailOtpAuth: async function(googleEmail, googleName = '') {
+      const cleanEmail = String(googleEmail || '').trim().toLowerCase();
+      if (!cleanEmail || !cleanEmail.includes('@')) {
+        throw new Error('Renseigne ton adresse e-mail Google valide (ex: prenom@gmail.com).');
+      }
+      const resolvedName = String(googleName || cleanEmail.split('@')[0]).trim();
+      setUserOtpVerified(null);
+      setCurrentUser(null);
+
+      // 1. Si un expéditeur serveur Resend est configuré, tenter l'envoi serveur
+      let otpMode = 'supabase_otp';
+      let otpType = 'email';
+      let rateLimited = false;
+
+      try {
+        const srvRes = await fetch(`${getBackendApiBase()}/api/auth/otp/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, purpose: 'google', userName: resolvedName })
+        });
+        const srvJson = await srvRes.json().catch(() => ({}));
+        if (srvRes.ok && srvJson.success && srvJson.sent && !srvJson.useSupabaseOtp) {
+          otpMode = 'server_otp';
+          otpType = 'google';
+        }
+      } catch {}
+
+      if (otpMode === 'supabase_otp') {
+        const sb = getSupabaseOrThrow();
+        const generatedRefCode = 'NZ-' + Math.floor(10000 + Math.random() * 90000);
+        const { error } = await sb.auth.signInWithOtp({
+          email: cleanEmail,
+          options: {
+            shouldCreateUser: true,
+            data: {
+              name: resolvedName,
+              full_name: resolvedName,
+              auth_provider: 'google',
+              referral_code: generatedRefCode
+            }
+          }
+        });
+        if (error) {
+          if (/security purposes|rate limit|too many requests/i.test(error.message)) {
+            rateLimited = true;
+          } else {
+            throw new Error(formatAuthError(error, "Impossible d'envoyer le code de validation à ton compte Google."));
+          }
+        }
+      }
+
+      const pendingPayload = {
+        email: cleanEmail,
+        name: resolvedName,
+        mode: 'google',
+        purpose: 'google',
+        otpMode,
+        otpType,
+        rateLimited
+      };
+      setPendingOtp(pendingPayload);
+      return {
+        needsOtpVerification: true,
+        ...pendingPayload
+      };
+    },
+
+    sendEmailOtp: async function(email, purpose = 'auth', userName = '', shouldCreateUser = false) {
       email = (email || '').trim().toLowerCase();
       if (!email || !email.includes('@')) throw new Error('Renseigne une adresse e-mail valide.');
 
-      // 1. Si un expéditeur e-mail nZembo (ex: Resend) est configuré côté serveur, l'utiliser en priorité
+      // 1. Si un expéditeur e-mail Nzembo (ex: Resend) est configuré côté serveur, l'utiliser en priorité
       try {
         const srvRes = await fetch(`${getBackendApiBase()}/api/auth/otp/send`, {
           method: 'POST',
@@ -1044,7 +1260,7 @@
         }
       } catch {}
 
-      // 2. Envoi OTP natif par e-mail via le serveur d'authentification
+      // 2. Envoi OTP natif à 6 chiffres par e-mail via Supabase Auth
       const sb = getSupabaseOrThrow();
       if (purpose === 'signup_unconfirmed') {
         const { error } = await sb.auth.resend({ type: 'signup', email });
@@ -1054,7 +1270,9 @@
 
       const { error } = await sb.auth.signInWithOtp({
         email,
-        options: { shouldCreateUser: false }
+        options: {
+          shouldCreateUser: Boolean(shouldCreateUser || purpose === 'google' || purpose === 'register')
+        }
       });
       if (error) {
         throw new Error(formatAuthError(error, "Impossible d'envoyer le code de validation par e-mail."));
@@ -1065,8 +1283,8 @@
     verifyEmailOtp: async function({ email, code, purpose = 'auth', otpMode = 'supabase_otp', otpType = 'email', expectedUser = null }) {
       email = (email || '').trim().toLowerCase();
       const token = String(code || '').replace(/\s+/g, '').trim();
-      if (!email || !token || token.length < 4) {
-        throw new Error('Entre le code de validation reçu par e-mail.');
+      if (!email || !/^\d{6}$/.test(token)) {
+        throw new Error('Entre le code de validation à 6 chiffres reçu par e-mail.');
       }
 
       const sb = getSupabaseOrThrow();
@@ -1085,7 +1303,9 @@
         const { data: uData } = await sb.auth.getUser();
         authUser = uData && uData.user;
       } else {
-        const typesToTry = otpType === 'signup' ? ['signup', 'email'] : ['email', 'signup'];
+        const typesToTry = otpType === 'signup'
+          ? ['signup', 'email', 'magiclink']
+          : ['email', 'magiclink', 'signup'];
         let verifyError = null;
         let verifyData = null;
 
@@ -1096,12 +1316,12 @@
             verifyError = null;
             break;
           }
-          verifyError = res.error;
+          if (!verifyError) verifyError = res.error;
         }
-        if (verifyError) {
-          throw new Error(formatAuthError(verifyError, 'Code de validation incorrect ou expiré.'));
+        if (!verifyData && verifyError) {
+          throw new Error(formatAuthError(verifyError, 'Code de validation à 6 chiffres incorrect ou expiré.'));
         }
-        authUser = (verifyData && verifyData.user) || null;
+        authUser = (verifyData && (verifyData.user || (verifyData.session && verifyData.session.user))) || null;
       }
 
       clearPendingOtp();
@@ -1111,12 +1331,15 @@
         const { data: uData } = await sb.auth.getUser();
         authUser = uData && uData.user;
       }
-      if (!authUser && expectedUser) {
+      if (!authUser && expectedUser && expectedUser.id) {
         authUser = expectedUser;
       }
-      if (!authUser) {
+      if (!authUser || !authUser.id) {
         throw new Error("Validation réussie, mais la session n'a pas pu être ouverte. Reconnecte-toi.");
       }
+
+      // Marquer explicitement cette session comme validée par OTP à 6 chiffres
+      setUserOtpVerified(authUser.id);
 
       const isRegister = (purpose === 'register' || purpose === 'signup_unconfirmed');
       let profile = null;
@@ -1142,7 +1365,7 @@
       const fallbackRef = (profile && profile.referral_code) || authUser.user_metadata?.referral_code || ('NZ-' + authUser.id.substring(0, 5).toUpperCase());
       const userObj = {
         id: authUser.id,
-        email: authUser.email,
+        email: authUser.email || email,
         name: (profile && profile.name) || fallbackName,
         credits: (profile && profile.credits !== undefined && profile.credits !== null) ? Math.max(0, Number(profile.credits)) : 0,
         avatar_url: (profile && profile.avatar_url) || getSavedAvatarForUser(authUser.id) || authUser.user_metadata?.avatar_url || null,
@@ -1168,6 +1391,9 @@
       password = (password || '').trim();
       if (!email) throw new Error('Renseigne ton adresse e-mail.');
       if (!password) throw new Error('Renseigne ton mot de passe.');
+
+      setUserOtpVerified(null);
+      setCurrentUser(null);
 
       const sb = getSupabaseOrThrow();
       let data, error;
@@ -1196,7 +1422,7 @@
       const authUser = data && data.user;
       if (!authUser) throw new Error("Aucune session utilisateur retournée.");
 
-      // Étape OTP obligatoire après vérification du mot de passe
+      // Étape OTP à 6 chiffres obligatoire après vérification du mot de passe
       let otpSendRes = { otpMode: 'supabase_otp', otpType: 'email' };
       let rateLimited = false;
       try {
@@ -1212,6 +1438,7 @@
       const pendingPayload = {
         email,
         uid: authUser.id,
+        name: authUser.user_metadata?.full_name || authUser.user_metadata?.name || email.split('@')[0],
         mode: 'login',
         purpose: 'login',
         otpMode: otpSendRes.otpMode || 'supabase_otp',
@@ -1234,6 +1461,9 @@
       if (!name) throw new Error('Renseigne ton nom complet.');
       if (!email || !email.includes('@')) throw new Error('Renseigne une adresse e-mail valide.');
       if (!password || password.length < 6) throw new Error('Le mot de passe doit comporter au moins 6 caractères.');
+
+      setUserOtpVerified(null);
+      setCurrentUser(null);
 
       const sb = getSupabaseOrThrow();
       const generatedRefCode = 'NZ-' + Math.floor(10000 + Math.random() * 90000);
@@ -1258,44 +1488,35 @@
         throw new Error(formatAuthError(netErr, 'Erreur réseau lors de la création du compte.'));
       }
 
-      if (error) {
+      let authUser = data && data.user;
+      const isAlreadyRegistered =
+        (error && /User already registered|already been registered|email_exists/i.test(error.message || '')) ||
+        (authUser && Array.isArray(authUser.identities) && authUser.identities.length === 0);
+
+      // Si l'utilisateur relance l'inscription sur un compte déjà créé avec ce mot de passe, enchaîner sur la vérification OTP
+      if (isAlreadyRegistered) {
+        const signInAttempt = await sb.auth.signInWithPassword({ email, password }).catch(() => ({ data: null, error: true }));
+        if (signInAttempt && !signInAttempt.error && signInAttempt.data && signInAttempt.data.user) {
+          authUser = signInAttempt.data.user;
+          data = signInAttempt.data;
+          error = null;
+        } else {
+          throw new Error('Un compte existe déjà avec cette adresse e-mail. Connecte-toi avec ton mot de passe.');
+        }
+      } else if (error) {
         throw new Error(formatAuthError(error, 'Impossible de créer le compte sur le serveur.'));
       }
 
-      const authUser = data && data.user;
       if (!authUser) throw new Error("Échec de la création du compte : réponse vide.");
-      if (Array.isArray(authUser.identities) && authUser.identities.length === 0) {
-        throw new Error('Un compte existe déjà avec cette adresse e-mail. Connecte-toi.');
-      }
 
-      // Initialisation STRICTEMENT À 0 CRÉDIT dès l'inscription (override tout trigger éventuel)
-      try {
-        await sb.from('profiles').upsert([{
-          id: authUser.id,
-          email: authUser.email,
-          name: name,
-          credits: 0,
-          referral_code: generatedRefCode
-        }], { onConflict: 'id' });
-      } catch {}
-
-      await this.syncUserWithBackend({
-        id: authUser.id,
-        email: authUser.email,
-        name: name,
-        referral_code: generatedRefCode,
-        referral_code_used: referralCodeUsed || null
-      }, { isNewSignup: true });
-
-      // Si signUp a déjà créé une session (autoconfirm = true), envoyer un code OTP 6 chiffres explicite
-      // Sinon signUp vient déjà d'envoyer le code de confirmation de type 'signup'
+      // Envoyer immédiatement le code OTP à 6 chiffres par e-mail sans bloquer sur les synchronisations annexes
       let otpMode = 'supabase_otp';
       let otpType = 'signup';
       let rateLimited = false;
 
-      if (data.session) {
+      if (data && data.session) {
         try {
-          const otpRes = await this.sendEmailOtp(email, 'register', name);
+          const otpRes = await this.sendEmailOtp(email, 'register', name, false);
           otpMode = otpRes.otpMode || 'supabase_otp';
           otpType = otpRes.otpType || 'email';
         } catch (otpErr) {
@@ -1308,8 +1529,30 @@
         }
       }
 
+      // Initialisation STRICTEMENT À 0 CRÉDIT dès l'inscription en tâche parallèle non bloquante
+      if (!isAlreadyRegistered) {
+        Promise.resolve().then(async () => {
+          try {
+            await sb.from('profiles').upsert([{
+              id: authUser.id,
+              email: authUser.email,
+              name: name,
+              credits: 0,
+              referral_code: generatedRefCode
+            }], { onConflict: 'id' });
+          } catch {}
+          await this.syncUserWithBackend({
+            id: authUser.id,
+            email: authUser.email,
+            name: name,
+            referral_code: generatedRefCode,
+            referral_code_used: referralCodeUsed || null
+          }, { isNewSignup: true }).catch(() => {});
+        });
+      }
+
       const pendingPayload = {
-        email: authUser.email,
+        email: authUser.email || email,
         uid: authUser.id,
         name: name,
         referral_code: generatedRefCode,
@@ -1323,7 +1566,7 @@
 
       return {
         id: authUser.id,
-        email: authUser.email,
+        email: authUser.email || email,
         name: name,
         credits: 0,
         referral_code: generatedRefCode,
@@ -1336,7 +1579,7 @@
     resendConfirmationEmail: async function(email) {
       const pending = getPendingOtp();
       const purpose = (pending && pending.otpType === 'signup') ? 'signup_unconfirmed' : ((pending && pending.purpose) || 'auth');
-      return await this.sendEmailOtp(email, purpose, (pending && pending.name) || '');
+      return await this.sendEmailOtp(email, purpose, (pending && pending.name) || '', pending && pending.mode === 'google');
     },
 
     requestPasswordReset: async function(email) {
@@ -1390,6 +1633,7 @@
           if (error) return { error: formatAuthError(error, 'Erreur lors de la validation de session.') };
           if (data && data.user) {
             clearPendingOtp();
+            setUserOtpVerified(data.user.id);
             return await this.refreshUserData();
           }
         }
@@ -1400,6 +1644,7 @@
           if (sessData && sessData.session && sessData.session.user) {
             window.history.replaceState({}, document.title, window.location.pathname);
             clearPendingOtp();
+            setUserOtpVerified(sessData.session.user.id);
             return await this.refreshUserData();
           }
         }
@@ -1409,6 +1654,10 @@
 
     logout: async function() {
       clearPendingOtp();
+      setUserOtpVerified(null);
+      if (typeof localStorage !== 'undefined') {
+        try { localStorage.removeItem('nzembo_admin_otp_verified_uid'); } catch {}
+      }
       const sb = getSupabase();
       if (sb) {
         try { await sb.auth.signOut(); } catch (e) {}
@@ -1421,7 +1670,7 @@
     refreshUserData: async function() {
       const pending = getPendingOtp();
       if (pending) {
-        return null; // Tant que le code OTP e-mail n'est pas saisi, garder la porte verrouillée
+        return null; // Tant que le code OTP e-mail à 6 chiffres n'est pas saisi, garder la porte verrouillée
       }
       const sb = getSupabase();
       if (!sb) return getCurrentUser();
@@ -1436,6 +1685,17 @@
 
         const userId = authUser ? authUser.id : (current ? current.id : null);
         if (!userId) return null;
+
+        // Pour Google OAuth direct, autoriser la session OAuth ; pour email/password, exiger la validation OTP à 6 chiffres
+        if (authUser) {
+          const provider = String(authUser.app_metadata?.provider || '').toLowerCase();
+          if (provider && provider !== 'email') {
+            setUserOtpVerified(userId);
+          }
+        }
+        if (!isUserOtpVerified(userId)) {
+          return null;
+        }
 
         let { data: profile } = await sb.from('profiles').select('*').eq('id', userId).maybeSingle();
         if (!profile && authUser) {
@@ -1830,7 +2090,7 @@
       if (!preserveOriginalStyle) {
         payload.customMode = true;
         payload.style = rawStyle.slice(0, 1000);
-        payload.title = (title && title.trim() && title.toLowerCase() !== 'reprise') ? title.trim().slice(0, 80) : 'Reprise nZembo';
+        payload.title = (title && title.trim() && title.toLowerCase() !== 'reprise') ? title.trim().slice(0, 80) : 'Reprise Nzembo';
         if (typeof audioWeight === 'number') payload.audioWeight = Math.min(1, Math.max(0, Number(audioWeight)));
         if (!isInstru) {
           const cleanLyrics = String(lyrics || prompt || title || rawStyle).trim();
@@ -2078,7 +2338,7 @@
       }
 
       if (!isValidEngineId(srcTaskId) || !isValidEngineId(srcAudioId)) {
-        throw new Error('Cette chanson n\'a pas d\'identifiant compatible pour la vidéo MP4. Sélectionne une chanson créée sur nZembo.');
+        throw new Error('Cette chanson n\'a pas d\'identifiant compatible pour la vidéo MP4. Sélectionne une chanson créée sur Nzembo.');
       }
 
       const res = await fetchAudioEngine('/mp4/generate', {
@@ -2262,7 +2522,7 @@
           } catch {}
         }
 
-        // B. Stockage nZembo Bucket
+        // B. Stockage Nzembo Bucket
         try {
           const sbUrl = await uploadMediaToSupabase(uploadBlob, candidateName, 'audio');
           if (sbUrl && /^https?:\/\//i.test(sbUrl)) return sbUrl;
@@ -2410,12 +2670,12 @@
       return data.data;
     },
 
-    createCustomVoice: async function({ taskId, verifyUrl, voiceName = 'Ma Voix', description = 'Voix personnalisée nZembo', style = 'pop', callBackUrl = WEBHOOK_NOOP_URL }) {
+    createCustomVoice: async function({ taskId, verifyUrl, voiceName = 'Ma Voix', description = 'Voix personnalisée Nzembo', style = 'pop', callBackUrl = WEBHOOK_NOOP_URL }) {
       if (!taskId) throw new Error('Identifiant de tâche requis pour créer la voix.');
       if (!verifyUrl || !/^https?:\/\//i.test(verifyUrl)) throw new Error('Une URL audio valide est requise.');
       const res = await fetchAudioEngine('/voice/generate', {
         method: 'POST',
-        body: JSON.stringify({ taskId, verifyUrl, voiceName: (voiceName || 'Voix nZembo').slice(0, 50), description: description.slice(0, 200), style, callBackUrl })
+        body: JSON.stringify({ taskId, verifyUrl, voiceName: (voiceName || 'Voix Nzembo').slice(0, 50), description: description.slice(0, 200), style, callBackUrl })
       });
       const data = await res.json().catch(() => ({}));
       if (!data || (data.code !== 200 && data.code !== 409) || !data.data) {
@@ -2607,7 +2867,7 @@
           style: options.style || 'Rumba congolaise',
           lyrics: options.lyrics || '',
           isInstrumental: Boolean(options.isInstrumental),
-          title: options.title || 'Composition nZembo'
+          title: options.title || 'Composition Nzembo'
         });
         return { ...genRes, conversionType: 'generate', eta: 70 };
       }

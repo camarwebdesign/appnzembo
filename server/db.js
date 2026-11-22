@@ -5,12 +5,15 @@ const { Pool } = require('pg');
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 dotenv.config({ path: path.join(__dirname, '.env') });
 
-if (!process.env.DATABASE_URL) {
+const DEFAULT_DATABASE_URL = 'postgresql://neondb_owner:npg_81vBijYgdnRV@ep-divine-poetry-b4vxduyu-pooler.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+const CONNECTION_STRING = (process.env.DATABASE_URL || DEFAULT_DATABASE_URL).trim();
+
+if (!CONNECTION_STRING) {
   throw new Error('DATABASE_URL manquant dans server/.env');
 }
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: CONNECTION_STRING,
   ssl: { rejectUnauthorized: false },
   connectionTimeoutMillis: 20000,
   idleTimeoutMillis: 30000,
@@ -207,6 +210,23 @@ async function initDb() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS explorer_posts (
+      id VARCHAR(120) PRIMARY KEY,
+      original_song_id VARCHAR(120),
+      user_id VARCHAR(120) NOT NULL,
+      artist VARCHAR(150) NOT NULL DEFAULT 'Artiste Nzembo',
+      title VARCHAR(255) NOT NULL,
+      style VARCHAR(100) DEFAULT '',
+      style_key VARCHAR(80) DEFAULT 'afrobeat',
+      occasion VARCHAR(120) DEFAULT '',
+      audio_url TEXT DEFAULT '',
+      video_url TEXT DEFAULT '',
+      cover_url TEXT DEFAULT '',
+      likes INT DEFAULT 0,
+      listens INT DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE INDEX IF NOT EXISTS idx_payment_tx_session ON payment_transactions (checkout_session_id);
     CREATE INDEX IF NOT EXISTS idx_payment_tx_payment ON payment_transactions (saspay_payment_id);
     CREATE INDEX IF NOT EXISTS idx_payment_tx_user ON payment_transactions (user_id);
@@ -214,6 +234,7 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_collab_email_lower ON admin_collaborators (LOWER(email));
     CREATE INDEX IF NOT EXISTS idx_visit_created ON visit_events (created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_otp_email_purpose ON otp_codes (LOWER(email), purpose);
+    CREATE INDEX IF NOT EXISTS idx_explorer_created ON explorer_posts (created_at DESC);
   `);
 
   // Supprimer l'ancien compte fictif de démonstration s'il existe encore sans vrais achats/chansons
@@ -224,7 +245,43 @@ async function initDb() {
       AND NOT EXISTS (SELECT 1 FROM payment_transactions WHERE user_id = 'usr_84920' AND credited = TRUE);
   `).catch(() => {});
 
-  console.log('✅ [DB] Tables PostgreSQL synchronisées avec succès (solde initial = 0).');
+  // Garantir le compte administrateur principal par défaut (admin.nzembo@gmail.com)
+  await pool.query(`
+    INSERT INTO admin_collaborators (id, supabase_user_id, email, name, role, permissions, status, invited_by)
+    VALUES (
+      'adm_main_superadmin',
+      '2edec6ec-c7e4-40b0-8d46-a4f337d781a3',
+      'admin.nzembo@gmail.com',
+      'Administrateur Nzembo',
+      'super_admin',
+      '{"overview":true,"users":true,"finances":true,"promos":true,"songs":true,"messages":true,"affiliation":true,"traffic":true,"team":true}'::jsonb,
+      'active',
+      'system_default'
+    )
+    ON CONFLICT (email) DO UPDATE SET
+      role = 'super_admin',
+      status = 'active',
+      supabase_user_id = COALESCE(NULLIF(admin_collaborators.supabase_user_id, ''), EXCLUDED.supabase_user_id),
+      permissions = EXCLUDED.permissions,
+      updated_at = NOW();
+  `).catch(() => {});
+
+  await pool.query(`
+    INSERT INTO users (id, name, email, credits, role, country, referral_code)
+    VALUES (
+      '2edec6ec-c7e4-40b0-8d46-a4f337d781a3',
+      'Administrateur Nzembo',
+      'admin.nzembo@gmail.com',
+      0,
+      'super_admin',
+      'RD Congo',
+      'NZ-ADMIN'
+    )
+    ON CONFLICT (email) DO UPDATE SET
+      role = 'super_admin';
+  `).catch(() => {});
+
+  console.log('✅ [DB] Tables PostgreSQL synchronisées avec succès (solde initial = 0, Admin principal actif).');
 }
 
 if (require.main === module) {

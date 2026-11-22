@@ -1,5 +1,5 @@
 // musicStylesDictionary.browser.js
-// Dictionnaire d'Authenticité Culturelle, Instruments Phares & Styles Étendus pour le Moteur Audio nZembo
+// Dictionnaire d'Authenticité Culturelle, Instruments Phares & Styles Étendus pour le Moteur Audio Nzembo
 
 (function(globalScope) {
   const MUSIC_STYLES_DICTIONARY = {

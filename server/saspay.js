@@ -54,8 +54,10 @@ const NAMED_PACKS = {
   },
 };
 
+const DEFAULT_SASPAY_SECRET_KEY = 'sk_live_MJvBNXyzab2eUUGyExcHKmRqKt9SZy_FtvBILJjdyXo';
+
 function getSaspayConfig() {
-  const secretKey = (process.env.SASPAY_SECRET_KEY || '').trim();
+  const secretKey = (process.env.SASPAY_SECRET_KEY || DEFAULT_SASPAY_SECRET_KEY).trim();
   const defaultBase = secretKey.startsWith('sk_test_')
     ? 'https://sandbox-api.saspay.me/api/v1'
     : 'https://api.saspay.me/api/v1';
@@ -659,7 +661,7 @@ function registerSaspayRoutes(app) {
       const saspayPayload = {
         amount: orderSpec.amountDecimal,
         currency: orderSpec.currency,
-        description: `nZembo — ${orderSpec.packName} (${orderSpec.credits} crédits)${orderSpec.promoCode ? ' [Promo ' + orderSpec.promoCode + ']' : ''}`,
+        description: `Nzembo — ${orderSpec.packName} (${orderSpec.credits} crédits)${orderSpec.promoCode ? ' [Promo ' + orderSpec.promoCode + ']' : ''}`,
         customer_email: customerEmail,
         customer_name: customerName,
         return_url: returnUrl,

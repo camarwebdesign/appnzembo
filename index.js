@@ -39,19 +39,17 @@ app.get('/env.local.js', (_req, res) => {
 
 // Montage des routes API Backend existantes (Neon DB, SasPay, Proxy Moteur Audio) sans altérer req.rawBody
 let backendServer = null;
-if (process.env.DATABASE_URL) {
-  try {
-    backendServer = require('./server/server');
-    app.use('/api', async (_req, _res, next) => {
-      if (backendServer && typeof backendServer.ensureDbReady === 'function') {
-        await backendServer.ensureDbReady().catch(() => {});
-      }
-      next();
-    });
-    app.use(backendServer.app);
-  } catch (err) {
-    console.warn('⚠️ Backend DB non monté au démarrage:', err.message);
-  }
+try {
+  backendServer = require('./server/server');
+  app.use('/api', async (_req, _res, next) => {
+    if (backendServer && typeof backendServer.ensureDbReady === 'function') {
+      await backendServer.ensureDbReady().catch(() => {});
+    }
+    next();
+  });
+  app.use(backendServer.app);
+} catch (err) {
+  console.warn('⚠️ Backend DB non monté au démarrage:', err.message);
 }
 
 if (!backendServer) {

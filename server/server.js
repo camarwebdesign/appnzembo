@@ -18,6 +18,24 @@ const FILE_UPLOAD_BASE = 'https://sunoapiorg.redpandaai.co/api';
 
 const DEFAULT_SUPABASE_URL = 'https://xmkdtbwurwtigkdjehhz.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhta2R0Ynd1cnd0aWdrZGplaGh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzMzU2NTEsImV4cCI6MjEwOTkxMTY1MX0.Yt9RqMgyHgQIbqK7SHZRgaAgltjQELZtylqGc1kM--Y';
+const DEFAULT_SUNO_API_KEY = '6114d500a8a51a212812c2d3832d5dc5';
+
+const SUPABASE_JWK = {
+  alg: 'ES256',
+  crv: 'P-256',
+  ext: true,
+  key_ops: ['verify'],
+  kid: '7f70364d-c1e6-4fe8-ac14-3a9236b8f69a',
+  kty: 'EC',
+  use: 'sig',
+  x: 'mBcFr1j1f54Hkv_3Yi4rXALbIDQtyViyRA5FfV8An18',
+  y: 'cXFX3c0dmoNGZe-v4Zsi08Y1s7yhaBs_R9gZJF5ecrA',
+};
+
+let SUPABASE_PUB_KEY = null;
+try {
+  SUPABASE_PUB_KEY = crypto.createPublicKey({ key: SUPABASE_JWK, format: 'jwk' });
+} catch {}
 
 function getSupabaseEnv() {
   const url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL).replace(/\/+$/, '');
@@ -26,7 +44,7 @@ function getSupabaseEnv() {
 }
 
 function getEngineApiKey() {
-  return (process.env.SUNO_API_KEY || process.env.SUNO_BEARER_TOKEN || process.env.ENGINE_BEARER_TOKEN || '').trim();
+  return (process.env.SUNO_API_KEY || process.env.SUNO_BEARER_TOKEN || process.env.ENGINE_BEARER_TOKEN || DEFAULT_SUNO_API_KEY).trim();
 }
 
 app.use(cors());
@@ -55,12 +73,43 @@ if (require.main === module) {
   });
 }
 
-// Vérification cryptographique d'un token Supabase JWT auprès de Supabase Auth API
+// Vérification cryptographique d'un token Supabase JWT (signature ES256 JWK locale + fallback Supabase Auth API)
 async function verifySupabaseJwt(authHeader) {
   const header = String(authHeader || '').trim();
   const match = header.match(/^Bearer\s+(.+)$/i);
   if (!match || !match[1]) return null;
   const token = match[1].trim();
+
+  // 1. Vérification cryptographique locale instantanée de la signature ES256 (clé publique officielle JWK Supabase)
+  try {
+    const parts = token.split('.');
+    if (parts.length === 3 && SUPABASE_PUB_KEY) {
+      const [hB64, pB64, sB64] = parts;
+      const hdr = JSON.parse(Buffer.from(hB64, 'base64url').toString('utf8'));
+      const payload = JSON.parse(Buffer.from(pB64, 'base64url').toString('utf8'));
+      if (hdr && hdr.alg === 'ES256') {
+        const sigValid = crypto.verify(
+          'sha256',
+          Buffer.from(`${hB64}.${pB64}`),
+          { key: SUPABASE_PUB_KEY, dsaEncoding: 'ieee-p1363' },
+          Buffer.from(sB64, 'base64url')
+        );
+        const notExpired = !payload.exp || (Number(payload.exp) * 1000 > Date.now() - 30000);
+        if (sigValid && notExpired && payload.sub && payload.email) {
+          return {
+            id: payload.sub,
+            email: payload.email,
+            user_metadata: payload.user_metadata || {},
+            app_metadata: payload.app_metadata || {},
+            created_at: payload.iat ? new Date(Number(payload.iat) * 1000).toISOString() : undefined,
+            accessToken: token,
+          };
+        }
+      }
+    }
+  } catch {}
+
+  // 2. Fallback réseau vers Supabase Auth /auth/v1/user
   const { url, anonKey } = getSupabaseEnv();
   if (!url || !anonKey) return null;
 
@@ -70,6 +119,7 @@ async function verifySupabaseJwt(authHeader) {
         apikey: anonKey,
         Authorization: `Bearer ${token}`,
       },
+      signal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(4500) : undefined,
     });
     if (!resp.ok) return null;
     const user = await resp.json().catch(() => null);
@@ -354,7 +404,7 @@ app.post('/api/credits/deduct', async (req, res) => {
           : 0;
         const ins = await client.query(
           `INSERT INTO users (id, name, email, credits) VALUES ($1, $2, $3, $4) RETURNING id, credits`,
-          [uid || ('usr_' + Date.now()), body.name || 'Créateur nZembo', email || `${uid}@users.nzembo.local`, seedBal]
+          [uid || ('usr_' + Date.now()), body.name || 'Créateur Nzembo', email || `${uid}@users.nzembo.local`, seedBal]
         );
         uRes = ins;
       }
@@ -426,7 +476,7 @@ app.post('/api/songs', async (req, res) => {
       [
         rowId,
         s.userId || s.user_id || '',
-        s.title || 'Création nZembo',
+        s.title || 'Création Nzembo',
         s.style || '',
         s.occasion || '',
         s.recipient || '',
@@ -587,10 +637,113 @@ app.get('/api/songs/user/:userId', async (req, res) => {
   try {
     await ensureDbReady();
     const { userId } = req.params;
+    if (!userId || userId === 'null' || userId === 'undefined') {
+      return res.json({ songs: [] });
+    }
     const r = await query('SELECT * FROM songs WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
     return res.json({ songs: r.rows });
   } catch (err) {
     return res.status(500).json({ error: err.message });
+  }
+});
+
+// ======================= EXPLORER PUBLIC & PARTAGÉ ENTRE UTILISATEURS AUTHENTIFIÉS =======================
+app.get('/api/explorer', async (_req, res) => {
+  try {
+    await ensureDbReady();
+    const r = await query('SELECT * FROM explorer_posts ORDER BY created_at DESC LIMIT 200');
+    const posts = (r.rows || []).map((row) => ({
+      id: row.id,
+      originalSongId: row.original_song_id || row.id,
+      userId: row.user_id,
+      artist: row.artist || 'Artiste Nzembo',
+      title: row.title || 'Création Nzembo',
+      style: row.style || '',
+      styleKey: row.style_key || 'afrobeat',
+      occasion: row.occasion || '',
+      audioUrl: row.audio_url || '',
+      videoUrl: row.video_url || '',
+      albumCover: row.cover_url || '',
+      likes: Math.max(0, Number(row.likes) || 0),
+      listens: Math.max(1, Number(row.listens) || 1),
+      createdAt: row.created_at,
+    }));
+    return res.json({ success: true, posts });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/explorer', async (req, res) => {
+  try {
+    await ensureDbReady();
+    const p = req.body || {};
+    const userId = String(p.userId || p.user_id || '').trim();
+    const title = String(p.title || '').trim();
+    if (!userId || !title) {
+      return res.status(400).json({ success: false, error: 'userId et title requis pour publier sur Explorer.' });
+    }
+    const postId = String(p.id || ('exp_' + Date.now() + '_' + crypto.randomBytes(2).toString('hex')));
+    const origId = String(p.originalSongId || p.original_song_id || postId);
+
+    const existing = await query(
+      `SELECT id FROM explorer_posts WHERE id = $1 OR (original_song_id = $2 AND user_id = $3) LIMIT 1`,
+      [postId, origId, userId]
+    );
+    if (existing.rows.length > 0) {
+      return res.json({ success: true, alreadyPublished: true, id: existing.rows[0].id });
+    }
+
+    const r = await query(
+      `INSERT INTO explorer_posts (id, original_song_id, user_id, artist, title, style, style_key, occasion, audio_url, video_url, cover_url, likes, listens)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       RETURNING *`,
+      [
+        postId,
+        origId,
+        userId,
+        String(p.artist || 'Artiste Nzembo').slice(0, 150),
+        title.slice(0, 255),
+        String(p.style || '').slice(0, 100),
+        String(p.styleKey || p.style_key || 'afrobeat').slice(0, 80),
+        String(p.occasion || '').slice(0, 120),
+        String(p.audioUrl || p.audio_url || ''),
+        String(p.videoUrl || p.video_url || ''),
+        String(p.albumCover || p.coverUrl || p.cover_url || ''),
+        Math.max(0, parseInt(p.likes, 10) || 0),
+        Math.max(1, parseInt(p.listens, 10) || 1),
+      ]
+    );
+    return res.json({ success: true, post: r.rows[0] });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/explorer/:id/like', async (req, res) => {
+  try {
+    await ensureDbReady();
+    const delta = Number(req.body?.delta) === -1 ? -1 : 1;
+    const r = await query(
+      `UPDATE explorer_posts SET likes = GREATEST(0, COALESCE(likes, 0) + $2) WHERE id = $1 RETURNING likes`,
+      [req.params.id, delta]
+    );
+    return res.json({ success: true, likes: r.rows[0] ? Number(r.rows[0].likes) : 0 });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/explorer/:id/listen', async (req, res) => {
+  try {
+    await ensureDbReady();
+    const r = await query(
+      `UPDATE explorer_posts SET listens = COALESCE(listens, 0) + 1 WHERE id = $1 RETURNING listens`,
+      [req.params.id]
+    );
+    return res.json({ success: true, listens: r.rows[0] ? Number(r.rows[0].listens) : 1 });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -647,7 +800,7 @@ app.post('/api/notifications', async (req, res) => {
     await query(
       `INSERT INTO user_notifications (id, user_id, target, category, category_label, badge_color, title, subject, content, is_error)
        VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [id, uid, category, categoryLabel, colBadge, String(title || 'Notification nZembo').slice(0, 250), String(subject).slice(0, 250), String(content || ''), Boolean(isError)]
+      [id, uid, category, categoryLabel, colBadge, String(title || 'Notification Nzembo').slice(0, 250), String(subject).slice(0, 250), String(content || ''), Boolean(isError)]
     );
     return res.json({ success: true, id });
   } catch (err) {
@@ -764,6 +917,44 @@ app.post('/api/admin/auth/bootstrap', async (req, res) => {
       [id, sbUser.id, sbUser.email.toLowerCase(), name, JSON.stringify(ROLE_DEFAULT_PERMISSIONS.super_admin)]
     );
     return res.json({ success: true, authorized: true, bootstrapped: true, member: ins.rows[0] });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Vérifier si un e-mail est autorisé à se connecter à l'administration (pré-contrôle avant envoi OTP)
+app.post('/api/admin/auth/precheck', async (req, res) => {
+  try {
+    await ensureDbReady();
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ success: false, authorized: false, error: 'Adresse e-mail invalide.' });
+    }
+    const r = await query(
+      `SELECT id, email, name, role, status FROM admin_collaborators WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+      [email]
+    );
+    if (!r.rows || r.rows.length === 0) {
+      return res.status(403).json({
+        success: false,
+        authorized: false,
+        error: "Accès refusé : cette adresse e-mail n'est pas autorisée dans l'administration Nzembo.",
+      });
+    }
+    const col = r.rows[0];
+    if (col.status === 'revoked') {
+      return res.status(403).json({
+        success: false,
+        authorized: false,
+        error: "Accès révoqué par l'administrateur principal.",
+      });
+    }
+    return res.json({
+      success: true,
+      authorized: true,
+      role: col.role,
+      name: col.name,
+    });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -923,7 +1114,7 @@ app.get('/api/admin/overview', requireAdminAuth('overview'), async (req, res) =>
       return {
         id: t.id,
         userId: t.user_id,
-        client: usr ? usr.name : (t.user_id || 'Client nZembo'),
+        client: usr ? usr.name : (t.user_id || 'Client Nzembo'),
         pack: t.pack || 'Recharge Crédits',
         credits: Number(t.credits) || 0,
         amountUSD: Number(t.amount_usd) || 0,
@@ -1024,7 +1215,7 @@ app.post('/api/admin/users/credit', requireAdminAuth('users'), async (req, res) 
     } else {
       const ins = await query(
         `INSERT INTO users (id, name, email, credits) VALUES ($1, $2, $3, $4) RETURNING *`,
-        [dbUserId, name || 'Artiste nZembo', (email || `${dbUserId}@users.nzembo.local`).toLowerCase(), Math.max(0, num)]
+        [dbUserId, name || 'Artiste Nzembo', (email || `${dbUserId}@users.nzembo.local`).toLowerCase(), Math.max(0, num)]
       );
       newBalance = Number(ins.rows[0].credits) || 0;
     }
@@ -1049,9 +1240,9 @@ app.post('/api/admin/users/credit', requireAdminAuth('users'), async (req, res) 
       [
         `notif_adm_${Date.now()}`,
         dbUserId,
-        num > 0 ? 'Crédits ajoutés par l\'équipe nZembo' : 'Ajustement de crédits',
+        num > 0 ? 'Crédits ajoutés par l\'équipe Nzembo' : 'Ajustement de crédits',
         `${num > 0 ? '+' : ''}${num} crédits (solde : ${newBalance})`,
-        `L'administration nZembo a mis à jour ton solde (${num > 0 ? '+' : ''}${num} crédits). Nouveau solde : ${newBalance} crédits.`,
+        `L'administration Nzembo a mis à jour ton solde (${num > 0 ? '+' : ''}${num} crédits). Nouveau solde : ${newBalance} crédits.`,
       ]
     );
 
@@ -1170,21 +1361,49 @@ app.get('/api/admin/collaborators', requireAdminAuth('team'), async (_req, res) 
 app.post('/api/admin/collaborators', requireAdminAuth('team'), async (req, res) => {
   try {
     await ensureDbReady();
-    const { email, name = '', role = 'collaborator', permissions } = req.body || {};
+    const { email, name = '', role = 'collaborator', permissions, password = '', supabaseUserId = '' } = req.body || {};
     const cleanEmail = String(email || '').trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@')) {
       return res.status(400).json({ success: false, error: 'Adresse e-mail valide requise.' });
     }
     const safeRole = ['admin', 'finance', 'moderator', 'support', 'collaborator'].includes(role) ? role : 'collaborator';
     const perms = permissions && typeof permissions === 'object' ? permissions : (ROLE_DEFAULT_PERMISSIONS[safeRole] || ROLE_DEFAULT_PERMISSIONS.collaborator);
+    const cleanName = String(name || cleanEmail.split('@')[0]).trim();
+
+    let resolvedSbUserId = String(supabaseUserId || '').trim() || null;
+    if (!resolvedSbUserId && password && String(password).length >= 6) {
+      const { url: sbUrl, anonKey: sbKey } = getSupabaseEnv();
+      try {
+        const sbResp = await fetch(`${sbUrl}/auth/v1/signup`, {
+          method: 'POST',
+          headers: { apikey: sbKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: cleanEmail,
+            password: String(password),
+            data: { full_name: cleanName, name: cleanName, role: safeRole },
+          }),
+          signal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined,
+        });
+        const sbJson = await sbResp.json().catch(() => ({}));
+        if (sbJson && (sbJson.user?.id || sbJson.id)) {
+          resolvedSbUserId = sbJson.user?.id || sbJson.id;
+        }
+      } catch {}
+    }
 
     const id = `adm_${crypto.randomUUID()}`;
     const r = await query(
-      `INSERT INTO admin_collaborators (id, email, name, role, permissions, status, invited_by)
-       VALUES ($1, $2, $3, $4, $5::jsonb, 'invited', $6)
-       ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, role = EXCLUDED.role, permissions = EXCLUDED.permissions, status = 'active', updated_at = NOW()
+      `INSERT INTO admin_collaborators (id, supabase_user_id, email, name, role, permissions, status, invited_by)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, 'active', $7)
+       ON CONFLICT (email) DO UPDATE SET
+         name = EXCLUDED.name,
+         role = EXCLUDED.role,
+         permissions = EXCLUDED.permissions,
+         supabase_user_id = COALESCE(NULLIF(EXCLUDED.supabase_user_id, ''), admin_collaborators.supabase_user_id),
+         status = 'active',
+         updated_at = NOW()
        RETURNING *`,
-      [id, cleanEmail, String(name || cleanEmail.split('@')[0]).trim(), safeRole, JSON.stringify(perms), req.adminUser.email]
+      [id, resolvedSbUserId, cleanEmail, cleanName, safeRole, JSON.stringify(perms), req.adminUser.email]
     );
 
     const invEmail = renderCollabInviteEmailHtml({
@@ -1281,7 +1500,7 @@ app.post('/api/admin/withdrawals/:id/decision', requireAdminAuth('affiliation'),
 app.post('/api/admin/broadcast', requireAdminAuth('messages'), async (req, res) => {
   try {
     await ensureDbReady();
-    const { category = 'annonce', categoryLabel = 'Annonce nZembo', title, subject = '', content, target = 'all' } = req.body || {};
+    const { category = 'annonce', categoryLabel = 'Annonce Nzembo', title, subject = '', content, target = 'all' } = req.body || {};
     if (!title || !content) return res.status(400).json({ success: false, error: 'Titre et message requis.' });
     const badgeMap = {
       annonce: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',

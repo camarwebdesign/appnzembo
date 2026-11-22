@@ -395,8 +395,8 @@
   <!-- TOAST NOTIFICATIONS (100% RESPONSIVE TOUT TYPE D'ÉCRAN : PC ET MOBILES) -->
   <div id="toast-container" class="fixed top-3 left-1/2 -translate-x-1/2 lg:left-[calc(50%+8rem)] lg:-translate-x-1/2 lg:top-4 z-[9999] space-y-2 pointer-events-none w-[calc(100vw-2rem)] max-w-md flex flex-col items-center"></div>
 
-  <!-- ================= MODAL D'AUTHENTIFICATION ================= -->
-  <div id="auth-modal" class="fixed inset-0 z-[160] bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 hidden">
+  <!-- ================= MODAL D'AUTHENTIFICATION (PORTE OBLIGATOIRE VISITEURS NON CONNECTÉS) ================= -->
+  <div id="auth-modal" class="fixed inset-0 z-[160] bg-[var(--nz-bg)] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
     <div class="bg-[var(--nz-surface)] border border-[var(--nz-border)] rounded-[16px] p-6 sm:p-8 max-w-md w-full shadow-xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
       <!-- Logo et Titre -->
       <div class="text-center space-y-2">
@@ -497,13 +497,31 @@
         </svg>
         <span>Continuer avec Google</span>
       </button>
+
+      <!-- Encart Connexion Compte Google par code OTP 6 chiffres (si redirection OAuth externe non configurée) -->
+      <div id="google-email-auth-box" class="hidden p-3.5 rounded-xl bg-[var(--nz-bg)] border border-[var(--nz-border)] space-y-2.5 text-xs">
+        <div class="flex items-center justify-between">
+          <span class="font-bold text-[var(--nz-text)] flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+            <span>Connexion avec ton compte Google</span>
+          </span>
+          <button type="button" onclick="document.getElementById('google-email-auth-box').classList.add('hidden')" class="text-[var(--nz-muted)] hover:text-[var(--nz-text)] font-bold">✕</button>
+        </div>
+        <p class="text-[11px] text-[var(--nz-muted)] leading-relaxed">Entre ton adresse Google (Gmail) pour recevoir immédiatement ton code de validation à 6 chiffres :</p>
+        <div class="space-y-2">
+          <input type="email" id="google-auth-email-input" placeholder="ton.adresse@gmail.com" class="app-input py-2 px-3 bg-[var(--nz-surface)] border border-[var(--nz-border)] text-[var(--nz-text)]">
+          <button type="button" id="google-auth-submit-btn" onclick="submitGoogleEmailAuth()" class="btn-primary w-full py-2.5 rounded-lg font-bold text-xs cursor-pointer">
+            Recevoir le code Google à 6 chiffres
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
   <!-- POP-UP D'INSTALLATION PWA (Apparaît automatiquement à la connexion comme demandé) -->
   
-  <!-- ================= MODAL VALIDATION PAR CODE E-MAIL (OTP) ================= -->
-  <div id="email-confirmation-modal" class="fixed inset-0 z-[170] bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 hidden">
+  <!-- ================= MODAL VALIDATION PAR CODE E-MAIL (OTP 6 CHIFFRES) ================= -->
+  <div id="email-confirmation-modal" class="fixed inset-0 z-[170] bg-[var(--nz-bg)] flex items-center justify-center p-3 sm:p-4 hidden overflow-y-auto">
     <div class="bg-[var(--nz-surface)] border border-[var(--nz-border)] rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 text-center animate-in fade-in zoom-in-95 duration-200">
       <div class="w-14 h-14 rounded-2xl bg-[var(--nz-accent-soft)] text-[var(--nz-accent)] flex items-center justify-center mx-auto shadow-inner">
         <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -515,16 +533,16 @@
         <p class="text-xs text-[var(--nz-muted)] leading-relaxed">
           Un code de vérification à 6 chiffres a été envoyé à <span id="confirm-modal-email" class="font-bold text-[var(--nz-accent)]"></span>.
         </p>
-        <p id="otp-modal-subtitle" class="text-[11px] text-[var(--nz-muted)]">Entre le code reçu pour valider ton accès et garder ta session active.</p>
+        <p id="otp-modal-subtitle" class="text-[11px] text-[var(--nz-muted)]">Entre le code à 6 chiffres reçu pour valider ton accès et ouvrir ton espace Nzembo.</p>
       </div>
       <form id="email-otp-form" onsubmit="handleVerifyEmailOtpSubmit(event)" class="space-y-3 text-left">
         <div>
           <label for="email-otp-input" class="block text-xs font-bold text-[var(--nz-text)] mb-1">Code de validation (6 chiffres)</label>
-          <input type="text" id="email-otp-input" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required placeholder="000000" class="app-input py-3 text-center text-xl font-extrabold tracking-[0.35em] font-mono bg-[var(--nz-bg)] border-2 border-[var(--nz-border)] focus:border-[var(--nz-accent)] text-[var(--nz-text)]">
+          <input type="text" id="email-otp-input" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" maxlength="6" required placeholder="000000" class="app-input py-3 text-center text-xl font-extrabold tracking-[0.35em] font-mono bg-[var(--nz-bg)] border-2 border-[var(--nz-border)] focus:border-[var(--nz-accent)] text-[var(--nz-text)]">
         </div>
         <div id="email-otp-error" class="hidden text-xs font-semibold text-rose-500 text-center"></div>
         <button type="submit" id="btn-verify-email-otp" class="btn-gradient w-full py-3 rounded-xl text-xs font-bold shadow-md cursor-pointer">
-          Valider le code et accéder à nZembo
+          Valider le code et accéder à Nzembo
         </button>
       </form>
       <div class="space-y-2 pt-1 border-t border-[var(--nz-border)]">
@@ -4068,16 +4086,23 @@
     }
     window.persistCommunitySongs = persistCommunitySongs;
 
-    // ================= GESTION ROBUSTE DE L'ÉTAT ET PERSISTANCE ANTI-PERTE =================
-    function loadPersistedUserSongs() {
+    // ================= GESTION ROBUSTE DE L'ÉTAT & ISOLATION STRICTE PAR UTILISATEUR =================
+    try { localStorage.removeItem('nzembo_user_songs'); } catch (e) {}
+
+    function getActiveUserSongsStorageKey(explicitUserId = '') {
+      const uid = explicitUserId || (window.NzemboBackend && typeof window.NzemboBackend.getCurrentUser === 'function' && window.NzemboBackend.getCurrentUser()?.id) || '';
+      return uid ? `nzembo_user_songs_${uid}` : '';
+    }
+
+    function loadPersistedUserSongs(explicitUserId = '') {
       try {
-        const cached = localStorage.getItem('nzembo_user_songs');
+        const key = getActiveUserSongsStorageKey(explicitUserId);
+        if (!key) return [];
+        const cached = localStorage.getItem(key);
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            // Filtrer et éliminer définitivement les faux échantillons démo
-            const realSongs = parsed.filter(s => s && s.id !== 'nz-sample-1' && s.id !== 'nz-sample-2');
-            return realSongs;
+            return parsed.filter(s => s && s.id !== 'nz-sample-1' && s.id !== 'nz-sample-2');
           }
         }
       } catch (e) {
@@ -4089,7 +4114,7 @@
     let userSongs = loadPersistedUserSongs();
     window.userSongs = userSongs;
 
-    function persistUserSongs(newList) {
+    function persistUserSongs(newList, explicitUserId = '') {
       if (Array.isArray(newList)) {
         userSongs = newList;
         window.userSongs = newList;
@@ -4098,9 +4123,12 @@
         else if (Array.isArray(userSongs)) window.userSongs = userSongs;
       }
       try {
-        localStorage.setItem('nzembo_user_songs', JSON.stringify(window.userSongs || userSongs || []));
+        const key = getActiveUserSongsStorageKey(explicitUserId);
+        if (key) {
+          localStorage.setItem(key, JSON.stringify(window.userSongs || userSongs || []));
+        }
       } catch (e) {
-        console.warn('Erreur persistance nzembo_user_songs:', e);
+        console.warn('Erreur persistance userSongs:', e);
       }
     }
     window.persistUserSongs = persistUserSongs;
@@ -4521,7 +4549,9 @@
 
     async function cancelPendingOtpAndShowAuth() {
       try {
-        if (window.NzemboBackend && typeof window.NzemboBackend.clearPendingOtp === 'function') {
+        if (window.NzemboBackend && typeof window.NzemboBackend.logout === 'function') {
+          await window.NzemboBackend.logout();
+        } else if (window.NzemboBackend && typeof window.NzemboBackend.clearPendingOtp === 'function') {
           window.NzemboBackend.clearPendingOtp();
         }
       } catch {}
@@ -4543,9 +4573,9 @@
         errEl.classList.add('hidden');
         errEl.textContent = '';
       }
-      if (!code || code.length < 4) {
+      if (!/^\d{6}$/.test(code)) {
         if (errEl) {
-          errEl.textContent = 'Saisis le code reçu par e-mail.';
+          errEl.textContent = 'Saisis le code de validation à 6 chiffres reçu par e-mail.';
           errEl.classList.remove('hidden');
         }
         return;
@@ -4572,7 +4602,7 @@
         if (window.NzemboBackend.trackVisit) window.NzemboBackend.trackVisit();
         triggerToast(
           ctx.mode === 'register'
-            ? `Bienvenue ${verifiedUser.name} ! Ton compte nZembo est activé.`
+            ? `Bienvenue ${verifiedUser.name} ! Ton compte Nzembo est activé.`
             : `Connexion validée ! Ravi de te revoir, ${verifiedUser.name}.`,
           'success'
         );
@@ -4586,7 +4616,7 @@
       } finally {
         if (btn) {
           btn.disabled = false;
-          btn.textContent = 'Valider le code et accéder à nZembo';
+          btn.textContent = 'Valider le code et accéder à Nzembo';
         }
       }
     }
@@ -4773,13 +4803,28 @@
       const prevHtml = gBtn ? gBtn.innerHTML : '';
       if (gBtn) {
         gBtn.disabled = true;
-        gBtn.innerHTML = '<span class="flex items-center gap-2"><svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>Redirection vers Google...</span>';
+        gBtn.innerHTML = '<span class="flex items-center gap-2"><svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>Connexion Google...</span>';
       }
       try {
         if (!window.NzemboBackend || !window.NzemboBackend.signInWithGoogle) {
           throw new Error('Connexion avec Google indisponible : module d\'authentification non chargé.');
         }
-        await window.NzemboBackend.signInWithGoogle();
+        const res = await window.NzemboBackend.signInWithGoogle();
+        if (res && res.fallbackGoogleEmailPrompt) {
+          if (gBtn) {
+            gBtn.disabled = false;
+            gBtn.innerHTML = prevHtml;
+          }
+          const gBox = document.getElementById('google-email-auth-box');
+          const gInp = document.getElementById('google-auth-email-input');
+          const mainEmail = document.getElementById('auth-input-email')?.value?.trim() || '';
+          if (gBox) gBox.classList.remove('hidden');
+          if (gInp) {
+            if (mainEmail && mainEmail.includes('@')) gInp.value = mainEmail;
+            setTimeout(() => { try { gInp.focus(); } catch {} }, 60);
+          }
+          return;
+        }
       } catch (err) {
         const msg = (err && err.message) ? err.message : 'Erreur lors de la connexion avec Google.';
         showAuthError(msg, false);
@@ -4787,6 +4832,39 @@
         if (gBtn) {
           gBtn.disabled = false;
           gBtn.innerHTML = prevHtml;
+        }
+      }
+    }
+
+    async function submitGoogleEmailAuth() {
+      clearAuthErrors();
+      const gInp = document.getElementById('google-auth-email-input');
+      const gSub = document.getElementById('google-auth-submit-btn');
+      const email = (gInp && gInp.value ? gInp.value : '').trim().toLowerCase();
+      if (!email || !email.includes('@')) {
+        showAuthError('Entre ton adresse e-mail Google valide (ex: prenom@gmail.com).', false);
+        return;
+      }
+      const prevTxt = gSub ? gSub.textContent : 'Recevoir le code Google à 6 chiffres';
+      if (gSub) {
+        gSub.disabled = true;
+        gSub.textContent = 'Envoi du code Google...';
+      }
+      try {
+        const res = await window.NzemboBackend.startGoogleEmailOtpAuth(email, document.getElementById('auth-input-name')?.value?.trim() || '');
+        const gBox = document.getElementById('google-email-auth-box');
+        if (gBox) gBox.classList.add('hidden');
+        hideAuthModal();
+        showEmailConfirmationModal(email, res);
+        triggerToast(`Code à 6 chiffres envoyé à ton compte Google (${email}).`, 'success');
+      } catch (err) {
+        const msg = (err && err.message) ? err.message : 'Impossible d\'envoyer le code Google.';
+        showAuthError(msg, false);
+        triggerToast(msg, 'error');
+      } finally {
+        if (gSub) {
+          gSub.disabled = false;
+          gSub.textContent = prevTxt;
         }
       }
     }
@@ -4975,30 +5053,35 @@
     }
 
     async function loadUserCreationsFromSupabase(userId) {
-      // 1. Restaurer d'abord depuis localStorage pour affichage instantané sans attente
+      const resolvedUid = userId || (window.NzemboBackend && typeof window.NzemboBackend.getCurrentUser === 'function' && window.NzemboBackend.getCurrentUser()?.id) || '';
+      if (!resolvedUid) {
+        userSongs = [];
+        window.userSongs = [];
+        renderRecentSongs();
+        renderAllSongs();
+        if (typeof renderShorts === 'function') renderShorts();
+        return;
+      }
+
+      // 1. Restaurer d'abord depuis le cache strictement isolé de cet utilisateur (nzembo_user_songs_${userId})
       try {
-        const cachedSongs = localStorage.getItem('nzembo_user_songs');
-        if (cachedSongs) {
-          const parsed = sanitizeCreationList(JSON.parse(cachedSongs));
-          if (parsed.length > 0) {
-            userSongs = parsed;
-            window.userSongs = userSongs;
-            renderRecentSongs();
-            renderAllSongs();
-            if (typeof renderShorts === 'function') renderShorts();
-          }
-        }
+        const scopedSongs = loadPersistedUserSongs(resolvedUid);
+        const parsed = sanitizeCreationList(scopedSongs).filter(s => !s.userId || String(s.userId) === String(resolvedUid));
+        userSongs = parsed;
+        window.userSongs = userSongs;
+        renderRecentSongs();
+        renderAllSongs();
+        if (typeof renderShorts === 'function') renderShorts();
       } catch (e) {}
 
-      // 2. Synchroniser ensuite depuis la base de données Supabase PostgreSQL (même si userId est absent ou démo)
+      // 2. Synchroniser ensuite depuis la base de données pour cet utilisateur uniquement
       if (!window.NzemboBackend) return;
       try {
         const fetchFn = window.NzemboBackend.getUserCreations || window.NzemboBackend.getUserSongs;
         if (!fetchFn) return;
-        const dbCreations = sanitizeCreationList(await fetchFn(userId || null));
+        const dbCreations = sanitizeCreationList(await fetchFn(resolvedUid)).filter(s => !s.userId || String(s.userId) === String(resolvedUid));
         if (dbCreations && dbCreations.length > 0) {
-          // Fusionner intelligemment avec les créations locales en préservant les IDs moteurs réels
-          const currentList = sanitizeCreationList(window.userSongs || userSongs || []);
+          const currentList = sanitizeCreationList(window.userSongs || userSongs || []).filter(s => !s.userId || String(s.userId) === String(resolvedUid));
           const localById = new Map();
           currentList.forEach(s => {
             if (s && s.id) localById.set(s.id, s);
@@ -5010,6 +5093,7 @@
             return {
               ...loc,
               ...dbItem,
+              userId: resolvedUid,
               title: (loc._customTitleUpdated && loc.title) ? loc.title : (dbItem.title || loc.title || 'Création Studio'),
               videoUrl: dbItem.videoUrl || loc.videoUrl || '',
               audioUrl: dbItem.audioUrl || loc.audioUrl || '',
@@ -5037,14 +5121,15 @@
 
           currentList.forEach(localSong => {
             if (!localSong) return;
+            if (localSong.userId && String(localSong.userId) !== String(resolvedUid)) return;
             const uid = localSong.id || localSong.taskId;
             if (!uid || seenIds.has(uid) || (localSong.taskId && seenIds.has(localSong.taskId))) return;
             if (localSong.isProcessing && String(localSong.taskId || '').startsWith('studio_')) return;
             seenIds.add(uid);
-            merged.push(localSong);
+            merged.push({ ...localSong, userId: resolvedUid });
           });
 
-          persistUserSongs(merged);
+          persistUserSongs(merged, resolvedUid);
           if (typeof resumeBackgroundSongPollers === 'function') {
             resumeBackgroundSongPollers();
           }
@@ -5052,6 +5137,9 @@
           renderAllSongs();
           if (typeof renderShorts === 'function') renderShorts();
         } else {
+          userSongs = [];
+          window.userSongs = [];
+          persistUserSongs([], resolvedUid);
           renderRecentSongs();
           renderAllSongs();
           if (typeof renderShorts === 'function') renderShorts();
@@ -5076,12 +5164,16 @@
         localStorage.removeItem('nzembo_auth_user');
         localStorage.removeItem('nzembo_demo_session');
         localStorage.removeItem('nzembo_user_songs');
+        localStorage.removeItem('nzembo_otp_verified_uid');
         userSongs = [];
         window.userSongs = [];
         userCredits = 0;
-        updateCreditDisplays();
+        window.userCredits = 0;
+        if (typeof closeFloatingPlayer === 'function') closeFloatingPlayer();
+        updateCreditDisplays(0);
         renderRecentSongs();
         renderAllSongs();
+        if (typeof renderShorts === 'function') renderShorts();
         triggerToast('Déconnexion réussie.', 'info');
         showAuthModal();
       }
@@ -9513,7 +9605,50 @@
     let directAudioPlayer = null;
     // Ancient duplicate playDirectTrack removed in favor of unified modern player
 
-    // Publier un morceau personnel sur l'onglet Explorer (Partage UNIQUE)
+    // Synchronisation Explorer partagé entre tous les utilisateurs authentifiés
+    async function syncExplorerCommunityFromBackend() {
+      if (!window.NzemboBackend || typeof window.NzemboBackend.getExplorerPosts !== 'function') return;
+      try {
+        const remotePosts = await window.NzemboBackend.getExplorerPosts();
+        if (Array.isArray(remotePosts) && remotePosts.length > 0) {
+          const existingMap = new Map();
+          (communitySongs || []).forEach(c => {
+            if (c && c.id) existingMap.set(String(c.id), c);
+          });
+          remotePosts.forEach(rp => {
+            if (!rp || !rp.id) return;
+            const prev = existingMap.get(String(rp.id));
+            existingMap.set(String(rp.id), {
+              ...prev,
+              id: rp.id,
+              originalSongId: rp.originalSongId || rp.id,
+              userId: rp.userId || '',
+              artist: rp.artist || 'Artiste Nzembo',
+              title: rp.title || 'Création Nzembo',
+              style: rp.style || 'Musique',
+              styleKey: rp.styleKey || 'rumba',
+              occasion: rp.occasion || '',
+              audioUrl: rp.audioUrl || '',
+              videoUrl: rp.videoUrl || '',
+              cover: rp.albumCover || (prev && prev.cover) || getDefaultSongCover(rp.style, rp.occasion),
+              albumCover: rp.albumCover || (prev && prev.albumCover) || getDefaultSongCover(rp.style, rp.occasion),
+              likes: Math.max(Number(rp.likes) || 0, prev ? (Number(prev.likes) || 0) : 0),
+              listens: Math.max(Number(rp.listens) || 1, prev ? (Number(prev.listens) || 1) : 1),
+              createdAt: rp.createdAt
+            });
+          });
+          communitySongs = Array.from(existingMap.values());
+          window.communitySongs = communitySongs;
+          if (typeof persistCommunitySongs === 'function') persistCommunitySongs(communitySongs);
+          if (currentTab === 'explorer' && typeof renderCommunityFeed === 'function') {
+            renderCommunityFeed(true);
+          }
+        }
+      } catch (e) {}
+    }
+    window.syncExplorerCommunityFromBackend = syncExplorerCommunityFromBackend;
+
+    // Publier un morceau personnel sur l'onglet Explorer (Partage PUBLIC & PARTAGÉ entre tous les utilisateurs)
     function publishToExplorerCommunity(songId) {
       const allSongs = (window.userSongs && Array.isArray(window.userSongs)) ? window.userSongs : (userSongs || []);
       const song = allSongs.find(s => s && (String(s.id) === String(songId) || String(s.taskId) === String(songId)));
@@ -9528,7 +9663,7 @@
       }
 
       // Vérifier si déjà publié sur Explorer
-      const alreadyShared = communitySongs.some(c => c.originalSongId === songId || c.title.trim().toLowerCase() === (song.title || '').trim().toLowerCase());
+      const alreadyShared = communitySongs.some(c => c.originalSongId === songId || (c.title && c.title.trim().toLowerCase() === (song.title || '').trim().toLowerCase() && c.userId === (window.NzemboBackend?.getCurrentUser()?.id || '')));
       if (alreadyShared) {
         triggerToast('Cet élément a déjà été partagé sur Explorer.', 'info');
         switchTab('explorer');
@@ -9538,6 +9673,7 @@
       const defaultCover = song.albumCover || song.coverUrl || song.cover_url || (typeof getDefaultSongCover === 'function' ? getDefaultSongCover(song.style, song.occasion) : '');
       const vidUrl = song.videoUrl || song.video_url || null;
       const audUrl = song.audioUrl || song.audio_url || song.audioUrl2 || song.vocalUrl || song.instrumentalUrl || vidUrl;
+      const currentUser = window.NzemboBackend?.getCurrentUser() || null;
 
       if (Array.isArray(communitySongs)) {
         communitySongs.forEach(c => { if (c) delete c._justPublished; });
@@ -9546,7 +9682,8 @@
       const newPost = {
         id: 'comm_' + Date.now(),
         originalSongId: songId,
-        artist: (window.NzemboBackend?.getCurrentUser()?.name || 'Toi'),
+        userId: (currentUser && currentUser.id) || 'user',
+        artist: (currentUser && currentUser.name) || 'Artiste Nzembo',
         title: song.title || 'Création Nzembo',
         style: song.style || (vidUrl ? 'Vidéo MP4' : 'Musique'),
         styleKey: 'rumba',
@@ -9557,11 +9694,15 @@
         audioUrl: audUrl,
         videoUrl: vidUrl,
         cover: defaultCover,
+        albumCover: defaultCover,
         _justPublished: true
       };
 
       communitySongs.unshift(newPost);
       if (typeof persistCommunitySongs === 'function') persistCommunitySongs(communitySongs);
+      if (window.NzemboBackend && typeof window.NzemboBackend.publishExplorerPost === 'function') {
+        window.NzemboBackend.publishExplorerPost(newPost).catch(() => {});
+      }
       triggerToast('Publié avec succès sur Explorer !', 'success');
       switchTab('explorer');
     }
@@ -13844,7 +13985,7 @@
         const cleanMsg = String(message || '').replace(/<[^>]*>/g, '').trim();
         if (!cleanMsg) return;
         if (window.NzemboStore && typeof window.NzemboStore.addErrorNotification === 'function') {
-          window.NzemboStore.addErrorNotification(sourceTitle, cleanMsg, 'Boîte de notifications nZembo');
+          window.NzemboStore.addErrorNotification(sourceTitle, cleanMsg, 'Boîte de notifications Nzembo');
         }
         if (window.NzemboBackend && typeof window.NzemboBackend.pushNotification === 'function') {
           window.NzemboBackend.pushNotification({
@@ -13879,7 +14020,7 @@
     // Toast (Pop-up élégant, lisible et parfaitement responsive sur mobile & PC)
     function triggerToast(message, type = 'info', actionBtn = null) {
       if (type === 'error') {
-        recordAppErrorNotification(message, 'Alerte nZembo');
+        recordAppErrorNotification(message, 'Alerte Nzembo');
       }
       const container = document.getElementById('toast-container');
       if (!container) return;
@@ -14992,6 +15133,9 @@
       const creatorListenEl = document.getElementById(`creator-listens-${origId}`);
       if (creatorListenEl) creatorListenEl.textContent = listensLbl;
       if (typeof persistCommunitySongs === 'function') persistCommunitySongs(communitySongs);
+      if (window.NzemboBackend && typeof window.NzemboBackend.listenExplorerPost === 'function') {
+        window.NzemboBackend.listenExplorerPost(song.id).catch(() => {});
+      }
     }
 
     function playFeedTrack(cardId, audioUrl) {
@@ -15175,8 +15319,10 @@
       const inlineCountEl = document.getElementById(`inline-like-count-${songId}`);
       const heartSvg = document.getElementById(`heart-svg-${songId}`);
 
+      let likeDelta = 1;
       if (likedSet.has(songId)) {
         likedSet.delete(songId);
+        likeDelta = -1;
         song.likes = Math.max(0, (Number(song.likes) || 1) - 1);
         if (heartSvg) {
           heartSvg.setAttribute('class', 'w-5 h-5 text-white');
@@ -15184,6 +15330,7 @@
         triggerToast('Mention J\'aime retirée.', 'info');
       } else {
         likedSet.add(songId);
+        likeDelta = 1;
         song.likes = (Number(song.likes) || 0) + 1;
         if (heartSvg) {
           heartSvg.setAttribute('class', 'w-5 h-5 text-rose-500 fill-current');
@@ -15199,6 +15346,9 @@
         localStorage.setItem(likedSongsStorageKey, JSON.stringify([...likedSet]));
       } catch (e) {}
       if (typeof persistCommunitySongs === 'function') persistCommunitySongs(communitySongs);
+      if (window.NzemboBackend && typeof window.NzemboBackend.likeExplorerPost === 'function') {
+        window.NzemboBackend.likeExplorerPost(songId, likeDelta).catch(() => {});
+      }
 
       renderAllSongs();
     }
@@ -15213,21 +15363,20 @@
       try {
         initTheme();
 
-        // 1. Charger les chansons locales immédiatement
-        try {
-          const cachedSongs = localStorage.getItem('nzembo_user_songs');
-          if (cachedSongs) {
-            const parsed = JSON.parse(cachedSongs);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              userSongs = parsed;
-              window.userSongs = parsed;
-            }
-          }
-        } catch (e) {}
-        if (!window.userSongs || !window.userSongs.length) {
+        // 1. Vérifier si un utilisateur authentifié et validé par OTP est présent (zéro compte invité par défaut)
+        const activeUser = (window.NzemboBackend && typeof window.NzemboBackend.getCurrentUser === 'function')
+          ? window.NzemboBackend.getCurrentUser()
+          : null;
+
+        if (activeUser && activeUser.id) {
+          userSongs = loadPersistedUserSongs(activeUser.id);
           window.userSongs = userSongs;
         } else {
-          userSongs = window.userSongs;
+          userSongs = [];
+          window.userSongs = [];
+          userCredits = 0;
+          window.userCredits = 0;
+          showAuthModal();
         }
 
         // 2. Rendu de tous les modules de données
@@ -15238,13 +15387,16 @@
         renderAllSongs();
         if (typeof renderShorts === 'function') renderShorts();
         renderCommunityFeed();
+        syncExplorerCommunityFromBackend();
         renderWaveform();
         attachRealAudioListeners();
-        updateCreditDisplays();
+        updateCreditDisplays(activeUser ? activeUser.credits : 0);
         updateReferralProfileUI();
         renderWithdrawalHistory();
         renderNotificationsUI();
-        loadUserCreationsFromSupabase(null);
+        if (activeUser && activeUser.id) {
+          loadUserCreationsFromSupabase(activeUser.id);
+        }
       } catch (initErr) {
         console.error('Erreur initialisation UI:', initErr);
       } finally {
@@ -15433,8 +15585,12 @@
                   applyLoggedInUser(u);
                   hideAuthModal();
                   if (window.NzemboBackend.fetchNotifications) window.NzemboBackend.fetchNotifications(u.id).then(() => renderNotificationsUI()).catch(() => {});
+                } else {
+                  showAuthModal();
                 }
-              }).catch(() => {});
+              }).catch(() => {
+                if (!currentUser) showAuthModal();
+              });
             } else if (!currentUser) {
               showAuthModal();
             }
