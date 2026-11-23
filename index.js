@@ -120,7 +120,7 @@ app.get(['/public/:asset', '/app/:asset'], (req, res, next) => {
 });
 
 app.use(express.static(PUBLIC_DIR, { index: false }));
-app.get(['/', '/auth/callback', '/callback', '/app', '/app/*'], sendAppView);
+app.get(['/', '/auth/callback', '/callback', '/app', '/app/*', '/invite', '/invite/*'], sendAppView);
 
 app.get('*', (req, res, next) => {
   if (!req.path.startsWith('/api/') && !path.extname(req.path)) {

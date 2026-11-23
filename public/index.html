@@ -484,42 +484,31 @@
         </div>
       </form>
 
-      <!-- Séparateur Google Auth -->
-      <div class="relative my-3">
-        <div class="absolute inset-0 flex items-center">
-          <div class="w-full border-t border-[var(--nz-border)]"></div>
+      <!-- Google OAuth momentanément désactivé -->
+      <div id="auth-google-section" class="hidden" aria-hidden="true" style="display:none;">
+        <!-- Séparateur Google Auth -->
+        <div class="relative my-3">
+          <div class="absolute inset-0 flex items-center">
+            <div class="w-full border-t border-[var(--nz-border)]"></div>
+          </div>
+          <div class="relative flex justify-center text-[10px] uppercase font-bold tracking-wider">
+            <span class="bg-[var(--nz-surface)] px-3 text-[var(--nz-muted)]">ou</span>
+          </div>
         </div>
-        <div class="relative flex justify-center text-[10px] uppercase font-bold tracking-wider">
-          <span class="bg-[var(--nz-surface)] px-3 text-[var(--nz-muted)]">ou</span>
-        </div>
-      </div>
 
-      <!-- Bouton Connexion Google OAuth 1-clic -->
-      <button type="button" id="auth-google-btn" onclick="handleGoogleSignIn()" class="w-full py-2.5 px-4 rounded-xl border border-[var(--nz-border)] bg-[var(--nz-bg)] text-slate-800 dark:text-white font-semibold text-xs flex items-center justify-center gap-2.5 hover:bg-[var(--nz-track)] transition-all shadow-xs cursor-pointer">
-        <svg class="w-4 h-4" viewBox="0 0 24 24">
-          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-        </svg>
-        <span>Continuer avec Google</span>
-      </button>
+        <!-- Bouton Connexion Google OAuth 1-clic -->
+        <button type="button" id="auth-google-btn" disabled onclick="handleGoogleSignIn()" class="hidden w-full py-2.5 px-4 rounded-xl border border-[var(--nz-border)] bg-[var(--nz-bg)] text-slate-800 dark:text-white font-semibold text-xs flex items-center justify-center gap-2.5 hover:bg-[var(--nz-track)] transition-all shadow-xs cursor-not-allowed">
+          <span>Continuer avec Google</span>
+        </button>
 
-      <!-- Encart Connexion Compte Google par code OTP 6 chiffres (si redirection OAuth externe non configurée) -->
-      <div id="google-email-auth-box" class="hidden p-3.5 rounded-xl bg-[var(--nz-bg)] border border-[var(--nz-border)] space-y-2.5 text-xs">
-        <div class="flex items-center justify-between">
-          <span class="font-bold text-[var(--nz-text)] flex items-center gap-1.5">
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
-            <span>Connexion avec ton compte Google</span>
-          </span>
-          <button type="button" onclick="document.getElementById('google-email-auth-box').classList.add('hidden')" class="text-[var(--nz-muted)] hover:text-[var(--nz-text)] font-bold">✕</button>
-        </div>
-        <p class="text-[11px] text-[var(--nz-muted)] leading-relaxed">Entre ton adresse Google (Gmail) pour recevoir immédiatement ton code de validation à 6 chiffres :</p>
-        <div class="space-y-2">
-          <input type="email" id="google-auth-email-input" placeholder="ton.adresse@gmail.com" class="app-input py-2 px-3 bg-[var(--nz-surface)] border border-[var(--nz-border)] text-[var(--nz-text)]">
-          <button type="button" id="google-auth-submit-btn" onclick="submitGoogleEmailAuth()" class="btn-primary w-full py-2.5 rounded-lg font-bold text-xs cursor-pointer">
-            Recevoir le code Google à 6 chiffres
-          </button>
+        <!-- Encart Connexion Compte Google par code OTP 6 chiffres (désactivé) -->
+        <div id="google-email-auth-box" class="hidden p-3.5 rounded-xl bg-[var(--nz-bg)] border border-[var(--nz-border)] space-y-2.5 text-xs">
+          <div class="space-y-2">
+            <input type="email" id="google-auth-email-input" placeholder="ton.adresse@gmail.com" class="app-input py-2 px-3 bg-[var(--nz-surface)] border border-[var(--nz-border)] text-[var(--nz-text)]">
+            <button type="button" id="google-auth-submit-btn" disabled onclick="submitGoogleEmailAuth()" class="btn-primary w-full py-2.5 rounded-lg font-bold text-xs cursor-not-allowed">
+              Recevoir le code Google à 6 chiffres
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -2572,7 +2561,8 @@
         </div>
         <!-- Filter Tabs for Mes Créations -->
         <div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none" id="creations-filter-tabs">
-          <button onclick="filterCreations('generation')" id="filter-generation" class="filter-tab-btn flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold bg-[var(--nz-accent)] text-[var(--nz-on-accent)] border border-[var(--nz-accent)] transition-colors">Compositions</button>
+          <button onclick="filterCreations('all')" id="filter-all" class="filter-tab-btn flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold bg-[var(--nz-accent)] text-[var(--nz-on-accent)] border border-[var(--nz-accent)] transition-colors">Tous</button>
+          <button onclick="filterCreations('generation')" id="filter-generation" class="filter-tab-btn flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-[var(--nz-surface)] text-slate-700 dark:text-slate-300 border border-[var(--nz-border)] transition-colors">Compositions</button>
           <button onclick="filterCreations('reprise')" id="filter-reprise" class="filter-tab-btn flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-[var(--nz-surface)] text-slate-700 dark:text-slate-300 border border-[var(--nz-border)] transition-colors">Reprises</button>
           <button onclick="filterCreations('remix')" id="filter-remix" class="filter-tab-btn flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-[var(--nz-surface)] text-slate-700 dark:text-slate-300 border border-[var(--nz-border)] transition-colors">Remix</button>
           <button onclick="filterCreations('stems')" id="filter-stems" class="filter-tab-btn flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-[var(--nz-surface)] text-slate-700 dark:text-slate-300 border border-[var(--nz-border)] transition-colors">Stems</button>
@@ -4011,6 +4001,12 @@
       }
     ];
 
+    // ICÔNES PLAY / PAUSE UNIVERSELLES DU LECTEUR
+    const SVG_PLAY_ICON = `<svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
+    const SVG_PAUSE_ICON = `<svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
+    window.SVG_PLAY_ICON = SVG_PLAY_ICON;
+    window.SVG_PAUSE_ICON = SVG_PAUSE_ICON;
+
     // STYLES MUSICAUX OFFICIELS NZEMBO (ICÔNES DISTINCTIVES PAR INSTRUMENT & STYLES ÉTENDUS)
     const DEFAULT_STYLE_SVG = `<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
     const STYLE_ICONS_SVG = {
@@ -4384,9 +4380,61 @@
     let unconfirmedUserEmail = '';
     let resendCooldownInterval = null;
 
-    function showAuthModal() {
+    function resolveCapturedReferralCode() {
+      let code = '';
+      try {
+        if (window.NzemboBackend && typeof window.NzemboBackend.captureReferralCodeFromUrl === 'function') {
+          code = window.NzemboBackend.captureReferralCodeFromUrl() || '';
+        }
+        if (!code && window.location) {
+          const urlP = new URLSearchParams(window.location.search || '');
+          let raw = urlP.get('ref') || urlP.get('referral') || urlP.get('invite') || urlP.get('code') || '';
+          if (!raw && window.location.pathname) {
+            const m = window.location.pathname.match(/\/invite\/([^/?#]+)/i);
+            if (m && m[1]) raw = decodeURIComponent(m[1]);
+          }
+          code = String(raw || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+          if (code && code.length >= 3) {
+            window._capturedReferralCode = code;
+            try { localStorage.setItem('nzembo_pending_referral_code', code); } catch {}
+            try { sessionStorage.setItem('nzembo_pending_referral_code', code); } catch {}
+          } else {
+            code = '';
+          }
+        }
+        if (!code) {
+          code = window._capturedReferralCode
+            || sessionStorage.getItem('nzembo_pending_referral_code')
+            || localStorage.getItem('nzembo_pending_referral_code')
+            || '';
+        }
+      } catch {}
+      return String(code || '').trim().toUpperCase();
+    }
+
+    function applyReferralCodeToForm(forceRegisterTab = false) {
+      const code = resolveCapturedReferralCode();
+      const refInput = document.getElementById('auth-input-referral');
+      if (code && refInput) {
+        refInput.value = code;
+      }
+      if (forceRegisterTab && code) {
+        if (typeof switchAuthMode === 'function') switchAuthMode('register');
+      }
+      return code;
+    }
+
+    function showAuthModal(preferredMode = null) {
       const modal = document.getElementById('auth-modal');
       if (modal) modal.classList.remove('hidden');
+      const pendingRef = resolveCapturedReferralCode();
+      if (preferredMode === 'register' || (!preferredMode && pendingRef)) {
+        switchAuthMode('register');
+      } else if (preferredMode === 'login') {
+        switchAuthMode('login');
+      } else {
+        applyReferralCodeToForm(false);
+      }
     }
 
     function hideAuthModal() {
@@ -4448,6 +4496,11 @@
         title.textContent = 'Créer un compte';
         sub.textContent = 'Rejoins Nzembo pour donner vie à tes musiques.';
         btnTxt.textContent = 'Créer mon compte';
+        const refInput = document.getElementById('auth-input-referral');
+        const pendingRef = resolveCapturedReferralCode();
+        if (refInput && pendingRef && !refInput.value.trim()) {
+          refInput.value = pendingRef;
+        }
       } else {
         tabLogin.className = 'flex-1 py-2 rounded-lg bg-white dark:bg-[var(--nz-track)] text-[var(--nz-accent)]  shadow-xs transition-all';
         tabRegister.className = 'flex-1 py-2 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 transition-all';
@@ -4465,7 +4518,8 @@
       const email = document.getElementById('auth-input-email').value.trim();
       const password = document.getElementById('auth-input-password').value.trim();
       const name = document.getElementById('auth-input-name').value.trim();
-      const referralCode = document.getElementById('auth-input-referral').value.trim();
+      const rawRefInput = document.getElementById('auth-input-referral').value.trim();
+      const referralCode = (rawRefInput || resolveCapturedReferralCode()).trim().toUpperCase();
       const btn = document.getElementById('auth-submit-btn');
 
       btn.disabled = true;
@@ -4806,74 +4860,16 @@
 
     async function handleGoogleSignIn() {
       clearAuthErrors();
-      const gBtn = document.getElementById('auth-google-btn');
-      const prevHtml = gBtn ? gBtn.innerHTML : '';
-      if (gBtn) {
-        gBtn.disabled = true;
-        gBtn.innerHTML = '<span class="flex items-center gap-2"><svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>Connexion Google...</span>';
-      }
-      try {
-        if (!window.NzemboBackend || !window.NzemboBackend.signInWithGoogle) {
-          throw new Error('Connexion avec Google indisponible : module d\'authentification non chargé.');
-        }
-        const res = await window.NzemboBackend.signInWithGoogle();
-        if (res && res.fallbackGoogleEmailPrompt) {
-          if (gBtn) {
-            gBtn.disabled = false;
-            gBtn.innerHTML = prevHtml;
-          }
-          const gBox = document.getElementById('google-email-auth-box');
-          const gInp = document.getElementById('google-auth-email-input');
-          const mainEmail = document.getElementById('auth-input-email')?.value?.trim() || '';
-          if (gBox) gBox.classList.remove('hidden');
-          if (gInp) {
-            if (mainEmail && mainEmail.includes('@')) gInp.value = mainEmail;
-            setTimeout(() => { try { gInp.focus(); } catch {} }, 60);
-          }
-          return;
-        }
-      } catch (err) {
-        const msg = (err && err.message) ? err.message : 'Erreur lors de la connexion avec Google.';
-        showAuthError(msg, false);
-        triggerToast(msg, 'error');
-        if (gBtn) {
-          gBtn.disabled = false;
-          gBtn.innerHTML = prevHtml;
-        }
-      }
+      const msg = 'La connexion via Google est momentanément désactivée. Connecte-toi avec ton adresse e-mail et ton mot de passe.';
+      showAuthError(msg, false);
+      triggerToast(msg, 'info');
     }
 
     async function submitGoogleEmailAuth() {
       clearAuthErrors();
-      const gInp = document.getElementById('google-auth-email-input');
-      const gSub = document.getElementById('google-auth-submit-btn');
-      const email = (gInp && gInp.value ? gInp.value : '').trim().toLowerCase();
-      if (!email || !email.includes('@')) {
-        showAuthError('Entre ton adresse e-mail Google valide (ex: prenom@gmail.com).', false);
-        return;
-      }
-      const prevTxt = gSub ? gSub.textContent : 'Recevoir le code Google à 6 chiffres';
-      if (gSub) {
-        gSub.disabled = true;
-        gSub.textContent = 'Envoi du code Google...';
-      }
-      try {
-        const res = await window.NzemboBackend.startGoogleEmailOtpAuth(email, document.getElementById('auth-input-name')?.value?.trim() || '');
-        const gBox = document.getElementById('google-email-auth-box');
-        if (gBox) gBox.classList.add('hidden');
-        hideAuthModal();
-        showEmailConfirmationModal(email, res);
-        triggerToast(`Code à 6 chiffres envoyé à ton compte Google (${email}).`, 'success');
-      } catch (err) {
-        const msg = (err && err.message) ? err.message : 'Impossible d\'envoyer le code Google.';
-        showAuthError(msg, false);
-        triggerToast(msg, 'error');
-      } finally {
-        if (gSub) {
-          gSub.disabled = false;
-          gSub.textContent = prevTxt;
-        }
-      }
+      const msg = 'La connexion via Google est momentanément désactivée. Connecte-toi avec ton adresse e-mail et ton mot de passe.';
+      showAuthError(msg, false);
+      triggerToast(msg, 'info');
     }
 
     function renderProfileAvatarUI(avatarUrl, displayName = 'U') {
@@ -5027,6 +5023,11 @@
 
       updateCreditDisplays(userCredits);
       updateReferralProfileUI();
+      if (window.NzemboBackend && typeof window.NzemboBackend.getReferralStats === 'function' && user.id) {
+        window.NzemboBackend.getReferralStats(user.id).then(() => {
+          updateReferralProfileUI();
+        }).catch(() => {});
+      }
       if (typeof updateHomeGreeting === 'function') {
         updateHomeGreeting(user);
       }
@@ -5059,6 +5060,8 @@
       });
     }
 
+    const _creationsLoadPromises = {};
+
     async function loadUserCreationsFromSupabase(userId) {
       const resolvedUid = userId || (window.NzemboBackend && typeof window.NzemboBackend.getCurrentUser === 'function' && window.NzemboBackend.getCurrentUser()?.id) || '';
       if (!resolvedUid) {
@@ -5067,95 +5070,136 @@
         renderRecentSongs();
         renderAllSongs();
         if (typeof renderShorts === 'function') renderShorts();
-        return;
+        return [];
       }
 
-      // 1. Restaurer d'abord depuis le cache strictement isolé de cet utilisateur (nzembo_user_songs_${userId})
-      try {
-        const scopedSongs = loadPersistedUserSongs(resolvedUid);
-        const parsed = sanitizeCreationList(scopedSongs).filter(s => !s.userId || String(s.userId) === String(resolvedUid));
-        userSongs = parsed;
-        window.userSongs = userSongs;
-        renderRecentSongs();
-        renderAllSongs();
-        if (typeof renderShorts === 'function') renderShorts();
-      } catch (e) {}
+      if (_creationsLoadPromises[resolvedUid]) {
+        return _creationsLoadPromises[resolvedUid];
+      }
 
-      // 2. Synchroniser ensuite depuis la base de données pour cet utilisateur uniquement
-      if (!window.NzemboBackend) return;
-      try {
-        const fetchFn = window.NzemboBackend.getUserCreations || window.NzemboBackend.getUserSongs;
-        if (!fetchFn) return;
-        const dbCreations = sanitizeCreationList(await fetchFn(resolvedUid)).filter(s => !s.userId || String(s.userId) === String(resolvedUid));
-        if (dbCreations && dbCreations.length > 0) {
-          const currentList = sanitizeCreationList(window.userSongs || userSongs || []).filter(s => !s.userId || String(s.userId) === String(resolvedUid));
-          const localById = new Map();
-          currentList.forEach(s => {
-            if (s && s.id) localById.set(s.id, s);
-          });
-
-          const merged = dbCreations.map(dbItem => {
-            const loc = localById.get(dbItem.id);
-            if (!loc) return dbItem;
-            return {
-              ...loc,
-              ...dbItem,
-              userId: resolvedUid,
-              title: (loc._customTitleUpdated && loc.title) ? loc.title : (dbItem.title || loc.title || 'Création Studio'),
-              videoUrl: dbItem.videoUrl || loc.videoUrl || '',
-              audioUrl: dbItem.audioUrl || loc.audioUrl || '',
-              coverUrl: (loc._customCoverUpdated && loc.coverUrl) ? loc.coverUrl : (dbItem.coverUrl || loc.coverUrl || ''),
-              albumCover: (loc._customCoverUpdated && loc.albumCover) ? loc.albumCover : (dbItem.albumCover || loc.albumCover || ''),
-              _customTitleUpdated: Boolean(loc._customTitleUpdated),
-              _customCoverUpdated: Boolean(loc._customCoverUpdated),
-              taskId: (dbItem.taskId && !String(dbItem.taskId).startsWith('studio_') && !String(dbItem.taskId).startsWith('nz_'))
-                ? dbItem.taskId
-                : (loc.taskId || dbItem.taskId),
-              audioId: (dbItem.audioId && !String(dbItem.audioId).startsWith('studio_') && !String(dbItem.audioId).startsWith('nz_'))
-                ? dbItem.audioId
-                : (loc.audioId || dbItem.audioId),
-              lyricsVtt: dbItem.lyricsVtt || loc.lyricsVtt || '',
-              sourceTaskId: dbItem.sourceTaskId || loc.sourceTaskId || '',
-              sourceAudioId: dbItem.sourceAudioId || loc.sourceAudioId || ''
-            };
-          });
-
-          const seenIds = new Set();
-          merged.forEach(s => {
-            if (s.id) seenIds.add(s.id);
-            if (s.taskId) seenIds.add(s.taskId);
-          });
-
-          currentList.forEach(localSong => {
-            if (!localSong) return;
-            if (localSong.userId && String(localSong.userId) !== String(resolvedUid)) return;
-            const uid = localSong.id || localSong.taskId;
-            if (!uid || seenIds.has(uid) || (localSong.taskId && seenIds.has(localSong.taskId))) return;
-            if (localSong.isProcessing && String(localSong.taskId || '').startsWith('studio_')) return;
-            seenIds.add(uid);
-            merged.push({ ...localSong, userId: resolvedUid });
-          });
-
-          persistUserSongs(merged, resolvedUid);
-          if (typeof resumeBackgroundSongPollers === 'function') {
-            resumeBackgroundSongPollers();
+      const run = (async () => {
+        // 1. Restaurer d'abord depuis le cache strictement isolé de cet utilisateur (nzembo_user_songs_${userId})
+        try {
+          const scopedSongs = loadPersistedUserSongs(resolvedUid);
+          const parsed = sanitizeCreationList(scopedSongs).filter(s => !s.userId || String(s.userId) === String(resolvedUid));
+          if (parsed.length > 0 || !Array.isArray(window.userSongs) || window.userSongs.length === 0) {
+            userSongs = parsed;
+            window.userSongs = parsed;
           }
           renderRecentSongs();
           renderAllSongs();
           if (typeof renderShorts === 'function') renderShorts();
-        } else {
-          userSongs = [];
-          window.userSongs = [];
-          persistUserSongs([], resolvedUid);
+        } catch (e) {}
+
+        // 2. Synchroniser ensuite depuis la base de données pour cet utilisateur uniquement
+        if (!window.NzemboBackend) return window.userSongs || [];
+        try {
+          const fetchFn = window.NzemboBackend.getUserCreations || window.NzemboBackend.getUserSongs;
+          if (!fetchFn) return window.userSongs || [];
+          const rawDbResult = await fetchFn(resolvedUid);
+          const fetchErrored = Boolean(rawDbResult && rawDbResult._fetchError);
+          if (fetchErrored) {
+            renderRecentSongs();
+            renderAllSongs();
+            if (typeof renderShorts === 'function') renderShorts();
+            return window.userSongs || [];
+          }
+
+          const dbCreations = sanitizeCreationList(rawDbResult).filter(s => !s.userId || String(s.userId) === String(resolvedUid));
+          const currentList = sanitizeCreationList(window.userSongs || userSongs || []).filter(s => !s.userId || String(s.userId) === String(resolvedUid));
+
+          if (dbCreations && dbCreations.length > 0) {
+            const localById = new Map();
+            currentList.forEach(s => {
+              if (s && s.id) localById.set(String(s.id), s);
+              if (s && s.taskId) localById.set(String(s.taskId), s);
+            });
+
+            const merged = dbCreations.map(dbItem => {
+              const loc = localById.get(String(dbItem.id)) || (dbItem.taskId ? localById.get(String(dbItem.taskId)) : null);
+              if (!loc) return dbItem;
+              return {
+                ...loc,
+                ...dbItem,
+                userId: resolvedUid,
+                title: (loc._customTitleUpdated && loc.title) ? loc.title : (dbItem.title || loc.title || 'Création Studio'),
+                videoUrl: dbItem.videoUrl || loc.videoUrl || '',
+                audioUrl: dbItem.audioUrl || loc.audioUrl || '',
+                coverUrl: (loc._customCoverUpdated && loc.coverUrl) ? loc.coverUrl : (dbItem.coverUrl || loc.coverUrl || ''),
+                albumCover: (loc._customCoverUpdated && loc.albumCover) ? loc.albumCover : (dbItem.albumCover || loc.albumCover || ''),
+                _customTitleUpdated: Boolean(loc._customTitleUpdated),
+                _customCoverUpdated: Boolean(loc._customCoverUpdated),
+                taskId: (dbItem.taskId && !String(dbItem.taskId).startsWith('studio_') && !String(dbItem.taskId).startsWith('nz_'))
+                  ? dbItem.taskId
+                  : (loc.taskId || dbItem.taskId),
+                audioId: (dbItem.audioId && !String(dbItem.audioId).startsWith('studio_') && !String(dbItem.audioId).startsWith('nz_'))
+                  ? dbItem.audioId
+                  : (loc.audioId || dbItem.audioId),
+                lyricsVtt: dbItem.lyricsVtt || loc.lyricsVtt || '',
+                sourceTaskId: dbItem.sourceTaskId || loc.sourceTaskId || '',
+                sourceAudioId: dbItem.sourceAudioId || loc.sourceAudioId || ''
+              };
+            });
+
+            const seenIds = new Set();
+            merged.forEach(s => {
+              if (s.id) seenIds.add(String(s.id));
+              if (s.taskId) seenIds.add(String(s.taskId));
+            });
+
+            currentList.forEach(localSong => {
+              if (!localSong) return;
+              if (localSong.userId && String(localSong.userId) !== String(resolvedUid)) return;
+              const uid = localSong.id || localSong.taskId;
+              if (!uid || seenIds.has(String(uid)) || (localSong.taskId && seenIds.has(String(localSong.taskId)))) return;
+              if (localSong.isProcessing && String(localSong.taskId || '').startsWith('studio_')) return;
+              seenIds.add(String(uid));
+              merged.push({ ...localSong, userId: resolvedUid });
+            });
+
+            persistUserSongs(merged, resolvedUid);
+            if (typeof resumeBackgroundSongPollers === 'function') {
+              resumeBackgroundSongPollers();
+            }
+            renderRecentSongs();
+            renderAllSongs();
+            if (typeof renderShorts === 'function') renderShorts();
+            return merged;
+          } else {
+            // Préserver toute création locale toute récente (< 5 min) et l'envoyer au backend plutôt que de l'effacer
+            const nowMs = Date.now();
+            const recentLocal = currentList.filter(s => {
+              if (!s || s.hasFailed) return false;
+              const createdMs = s.createdAt ? new Date(s.createdAt).getTime() : 0;
+              return createdMs && (nowMs - createdMs) < 300000;
+            });
+            recentLocal.forEach(s => {
+              if (window.NzemboBackend && typeof window.NzemboBackend.saveCreation === 'function') {
+                window.NzemboBackend.saveCreation({ ...s, userId: resolvedUid }).catch(() => {});
+              }
+            });
+            persistUserSongs(recentLocal, resolvedUid);
+            renderRecentSongs();
+            renderAllSongs();
+            if (typeof renderShorts === 'function') renderShorts();
+            return recentLocal;
+          }
+        } catch (err) {
+          console.warn('Synchronisation Supabase des créations reportée:', err);
           renderRecentSongs();
           renderAllSongs();
           if (typeof renderShorts === 'function') renderShorts();
+          return window.userSongs || [];
         }
-      } catch (err) {
-        console.warn('Synchronisation Supabase des créations reportée:', err);
-        renderRecentSongs();
-        renderAllSongs();
-        if (typeof renderShorts === 'function') renderShorts();
+      })();
+
+      _creationsLoadPromises[resolvedUid] = run;
+      try {
+        return await run;
+      } finally {
+        if (_creationsLoadPromises[resolvedUid] === run) {
+          delete _creationsLoadPromises[resolvedUid];
+        }
       }
     }
     // Rétrocompatibilité avec les anciens appels
@@ -5742,9 +5786,9 @@
         if (typeof syncGlobalAudioStateAcrossViews === 'function') syncGlobalAudioStateAcrossViews();
       }
       if (tabId === 'songs') {
-        if (!window.activeCreationsFilter || window.activeCreationsFilter === 'all') {
+        if (!window.activeCreationsFilter) {
           if (typeof filterCreations === 'function') {
-            filterCreations('generation');
+            filterCreations('all');
           } else {
             renderAllSongs();
           }
@@ -5756,7 +5800,10 @@
       if (tabId === 'shorts') {
         if (typeof renderShorts === 'function') renderShorts();
       }
-      if (tabId === 'explorer') renderCommunityFeed();
+      if (tabId === 'explorer') {
+        renderCommunityFeed();
+        if (typeof syncExplorerCommunityFromBackend === 'function') syncExplorerCommunityFromBackend();
+      }
     }
 
     // ================= WIZARD RENDERERS (High Contrast Dark Mode) =================
@@ -9197,12 +9244,23 @@
       } else {
         userSongs.unshift(finishedSongObj);
       }
-      try { localStorage.setItem('nzembo_user_songs', JSON.stringify(userSongs)); } catch(e){}
+      window.userSongs = userSongs;
+      if (typeof persistUserSongs === 'function') {
+        persistUserSongs(userSongs);
+      }
 
-
+      if (window.NzemboBackend && typeof window.NzemboBackend.saveCreation === 'function') {
+        window.NzemboBackend.saveCreation({
+          ...finishedSongObj,
+          coverUrl: finalCover,
+          status: 'termine',
+          isProcessing: false
+        }).catch(() => {});
+      }
 
       renderRecentSongs();
       renderAllSongs();
+      if (typeof renderShorts === 'function') renderShorts();
       renderWaveform();
 
       // DÉCLENCHEMENT DE LA CÉLÉBRATION (FEUX D'ARTIFICE / CONFETTIS & ÉTOILES)
@@ -9457,9 +9515,10 @@
           } else {
             userSongs[exIdx] = pendingSongObj2;
           }
-          try { localStorage.setItem('nzembo_user_songs', JSON.stringify(userSongs)); } catch(e){}
-
-
+          window.userSongs = userSongs;
+          if (typeof persistUserSongs === 'function') {
+            persistUserSongs(userSongs);
+          }
 
           if (typeof renderAllSongs === 'function') renderAllSongs();
           if (typeof renderRecentSongs === 'function') renderRecentSongs();
@@ -9617,10 +9676,13 @@
       if (!window.NzemboBackend || typeof window.NzemboBackend.getExplorerPosts !== 'function') return;
       try {
         const remotePosts = await window.NzemboBackend.getExplorerPosts();
-        if (Array.isArray(remotePosts) && remotePosts.length > 0) {
+        if (Array.isArray(remotePosts)) {
           const existingMap = new Map();
+          const nowSyncMs = Date.now();
           (communitySongs || []).forEach(c => {
-            if (c && c.id) existingMap.set(String(c.id), c);
+            if (!c || !c.id) return;
+            const isRecentPublish = Boolean(c._justPublished || (c._publishedAtMs && (nowSyncMs - c._publishedAtMs) < 60000));
+            if (isRecentPublish) existingMap.set(String(c.id), c);
           });
           remotePosts.forEach(rp => {
             if (!rp || !rp.id) return;
@@ -9632,9 +9694,10 @@
               userId: rp.userId || '',
               artist: rp.artist || 'Artiste Nzembo',
               title: rp.title || 'Création Nzembo',
-              style: rp.style || 'Musique',
+              style: rp.style || (rp.videoUrl ? 'Vidéo MP4' : 'Musique'),
               styleKey: rp.styleKey || 'rumba',
               occasion: rp.occasion || '',
+              toolCategory: rp.toolCategory || (rp.videoUrl && !rp.audioUrl ? 'video' : 'generation'),
               audioUrl: rp.audioUrl || '',
               videoUrl: rp.videoUrl || '',
               cover: rp.albumCover || (prev && prev.cover) || getDefaultSongCover(rp.style, rp.occasion),
@@ -9649,6 +9712,9 @@
           if (typeof persistCommunitySongs === 'function') persistCommunitySongs(communitySongs);
           if (currentTab === 'explorer' && typeof renderCommunityFeed === 'function') {
             renderCommunityFeed(true);
+          }
+          if (typeof renderAllSongs === 'function') {
+            renderAllSongs();
           }
         }
       } catch (e) {}
@@ -9669,18 +9735,34 @@
         return;
       }
 
+      const currentUser = window.NzemboBackend?.getCurrentUser() || null;
+      const vidUrl = song.videoUrl || song.video_url || null;
+      const audUrl = song.audioUrl || song.audio_url || song.audioUrl2 || song.vocalUrl || song.instrumentalUrl || vidUrl || '';
+      if (!audUrl && !vidUrl) {
+        triggerToast('Cette création ne contient pas encore de média prêt à être publié.', 'error');
+        return;
+      }
+
       // Vérifier si déjà publié sur Explorer
-      const alreadyShared = communitySongs.some(c => c.originalSongId === songId || (c.title && c.title.trim().toLowerCase() === (song.title || '').trim().toLowerCase() && c.userId === (window.NzemboBackend?.getCurrentUser()?.id || '')));
+      const alreadyShared = communitySongs.find(c =>
+        c && (
+          String(c.originalSongId) === String(songId) ||
+          (c.title && c.title.trim().toLowerCase() === (song.title || '').trim().toLowerCase() && String(c.userId || '') === String((currentUser && currentUser.id) || ''))
+        )
+      );
       if (alreadyShared) {
+        if (window.NzemboBackend && typeof window.NzemboBackend.publishExplorerPost === 'function') {
+          window.NzemboBackend.publishExplorerPost({
+            ...alreadyShared,
+            userId: (currentUser && currentUser.id) || alreadyShared.userId || 'user'
+          }).catch(() => {});
+        }
         triggerToast('Cet élément a déjà été partagé sur Explorer.', 'info');
         switchTab('explorer');
         return;
       }
 
       const defaultCover = song.albumCover || song.coverUrl || song.cover_url || (typeof getDefaultSongCover === 'function' ? getDefaultSongCover(song.style, song.occasion) : '');
-      const vidUrl = song.videoUrl || song.video_url || null;
-      const audUrl = song.audioUrl || song.audio_url || song.audioUrl2 || song.vocalUrl || song.instrumentalUrl || vidUrl;
-      const currentUser = window.NzemboBackend?.getCurrentUser() || null;
 
       if (Array.isArray(communitySongs)) {
         communitySongs.forEach(c => { if (c) delete c._justPublished; });
@@ -9688,13 +9770,14 @@
 
       const newPost = {
         id: 'comm_' + Date.now(),
-        originalSongId: songId,
-        userId: (currentUser && currentUser.id) || 'user',
+        originalSongId: song.id || songId,
+        userId: (currentUser && currentUser.id) || song.userId || 'user',
         artist: (currentUser && currentUser.name) || 'Artiste Nzembo',
         title: song.title || 'Création Nzembo',
         style: song.style || (vidUrl ? 'Vidéo MP4' : 'Musique'),
         styleKey: 'rumba',
         occasion: song.occasion || 'Célébration',
+        toolCategory: song.toolCategory || (vidUrl && !song.audioUrl ? 'video' : 'generation'),
         likes: 1,
         listens: 1,
         date: 'À l\'instant',
@@ -9702,14 +9785,20 @@
         videoUrl: vidUrl,
         cover: defaultCover,
         albumCover: defaultCover,
-        _justPublished: true
+        _justPublished: true,
+        _publishedAtMs: Date.now()
       };
 
+      song.isPublic = true;
+      if (typeof persistUserSongs === 'function') persistUserSongs(allSongs);
+
       communitySongs.unshift(newPost);
+      window.communitySongs = communitySongs;
       if (typeof persistCommunitySongs === 'function') persistCommunitySongs(communitySongs);
       if (window.NzemboBackend && typeof window.NzemboBackend.publishExplorerPost === 'function') {
         window.NzemboBackend.publishExplorerPost(newPost).catch(() => {});
       }
+      if (typeof renderAllSongs === 'function') renderAllSongs();
       triggerToast('Publié avec succès sur Explorer !', 'success');
       switchTab('explorer');
     }
@@ -9727,10 +9816,6 @@
       }
       if (typeof persistUserSongs === 'function') {
         persistUserSongs(window.userSongs || userSongs || []);
-      } else {
-        try {
-          localStorage.setItem('nzembo_user_songs', JSON.stringify(window.userSongs || userSongs || []));
-        } catch(e) {}
       }
 
       // Retirer également d'Explorer si ce morceau y avait été publié
@@ -9744,7 +9829,7 @@
         if (typeof closeFloatingPlayer === 'function') closeFloatingPlayer();
       }
 
-      // ── SUPPRESSION SYNCHRONE DANS SUPABASE CLOUD ──
+      // ── SUPPRESSION SYNCHRONE DANS SUPABASE CLOUD & NEON ──
       if (window.NzemboBackend && typeof window.NzemboBackend.deleteCreation === 'function') {
         window.NzemboBackend.deleteCreation(songId).catch(function(e) {
           console.warn('Suppression creation:', e.message);
@@ -9754,7 +9839,7 @@
       renderRecentSongs();
       renderAllSongs();
       if (typeof renderCommunityFeed === 'function') renderCommunityFeed();
-      if (typeof renderShortsVideoList === 'function') renderShortsVideoList();
+      if (typeof renderShorts === 'function') renderShorts();
       triggerToast('Création supprimée avec succès.', 'info');
     }
     window.deleteSongCreation = deleteSongCreation;
@@ -9763,33 +9848,54 @@
     function shareShortToExplorerAction() {
       const title = document.getElementById('yt-video-title')?.value || 'Short Musical';
       const targetUrl = activeVariantIndex === 1 ? currentAudioTrackUrl : (currentAudioTrackUrl2 || currentAudioTrackUrl);
+      const currentUser = window.NzemboBackend?.getCurrentUser() || null;
 
-      const alreadyShared = communitySongs.some(c => c.audioUrl === targetUrl || c.title.trim().toLowerCase() === title.trim().toLowerCase());
+      const alreadyShared = communitySongs.find(c => c && (c.audioUrl === targetUrl || c.title.trim().toLowerCase() === title.trim().toLowerCase()));
       if (alreadyShared) {
+        if (window.NzemboBackend && typeof window.NzemboBackend.publishExplorerPost === 'function') {
+          window.NzemboBackend.publishExplorerPost({
+            ...alreadyShared,
+            userId: (currentUser && currentUser.id) || alreadyShared.userId || 'user'
+          }).catch(() => {});
+        }
         triggerToast('Ce Short a déjà été partagé sur Explorer.', 'info');
         closeYouTubeStudioModal();
         switchTab('explorer');
         return;
       }
 
-      communitySongs.unshift({
+      const defaultCover = typeof getDefaultSongCover === 'function' ? getDefaultSongCover('afrobeat', 'Short') : '';
+      const shortPost = {
         id: 'comm_short_' + Date.now(),
-        artist: window.NzemboBackend?.getCurrentUser()?.name || 'Compte Nzembo',
+        originalSongId: 'short_' + Date.now(),
+        userId: (currentUser && currentUser.id) || 'user',
+        artist: (currentUser && currentUser.name) || 'Compte Nzembo',
         title: title,
         style: 'Short Musical 9:16',
         styleKey: 'afrobeat',
         occasion: 'Short Musical',
+        toolCategory: 'generation',
         likes: 1,
         listens: 1,
         date: 'À l\'instant',
-        audioUrl: targetUrl,
-        cover: typeof getDefaultSongCover === 'function' ? getDefaultSongCover('afrobeat', 'Short') : ''
-      });
+        audioUrl: targetUrl || '',
+        videoUrl: '',
+        cover: defaultCover,
+        albumCover: defaultCover,
+        _justPublished: true,
+        _publishedAtMs: Date.now()
+      };
+
+      communitySongs.unshift(shortPost);
+      window.communitySongs = communitySongs;
       if (typeof persistCommunitySongs === 'function') persistCommunitySongs(communitySongs);
+      if (window.NzemboBackend && typeof window.NzemboBackend.publishExplorerPost === 'function') {
+        window.NzemboBackend.publishExplorerPost(shortPost).catch(() => {});
+      }
 
       closeYouTubeStudioModal();
       renderCommunityFeed();
-      triggerToast('Ton Short est publié.', 'success');
+      triggerToast('Ton Short est publié sur Explorer !', 'success');
       switchTab('explorer');
     }
 
@@ -11103,10 +11209,9 @@
 
           let allCandidates = [];
           try {
-            const cached = localStorage.getItem('nzembo_user_songs');
-            if (cached) {
-              const parsed = JSON.parse(cached);
-              if (Array.isArray(parsed)) allCandidates.push(...parsed);
+            if (typeof loadPersistedUserSongs === 'function') {
+              const scoped = loadPersistedUserSongs();
+              if (Array.isArray(scoped)) allCandidates.push(...scoped);
             }
           } catch(e) {}
           if (typeof userSongs !== 'undefined' && Array.isArray(userSongs)) allCandidates.push(...userSongs);
@@ -11357,11 +11462,12 @@
           const item = window.userSongs.find(s => s.id === noteId || s.taskId === noteId);
           if (item) {
             item.lyrics = newLyrics;
-            try { localStorage.setItem('nzembo_user_songs', JSON.stringify(window.userSongs)); } catch (e) {}
+            if (typeof persistUserSongs === 'function') persistUserSongs(window.userSongs);
             if (window.NzemboBackend && typeof window.NzemboBackend.updateCreation === 'function') {
               window.NzemboBackend.updateCreation(noteId, { lyrics: newLyrics }).catch(() => {});
             }
             if (typeof renderAllSongs === 'function') renderAllSongs();
+            if (typeof renderRecentSongs === 'function') renderRecentSongs();
           }
         }
         if (statusEl) statusEl.textContent = 'Enregistré';
@@ -11538,21 +11644,39 @@
               delete window._activeBackgroundPollers[taskId];
 
               // Mettre à jour l'entrée correspondante dans userSongs
+              let updatedItem = null;
               if (window.userSongs && Array.isArray(userSongs)) {
                 const target = userSongs.find(s => s.taskId === taskId || s.id === songId);
                 if (target) {
                   target.isProcessing = false;
                   target.audioUrl = statusData.audioUrl;
-                  target.audioUrl2 = null;
+                  target.audioUrl2 = statusData.audioUrl2 || null;
                   target.albumCover = statusData.albumCover || target.albumCover || (typeof getDefaultSongCover === 'function' ? getDefaultSongCover(styleName) : '');
+                  target.coverUrl = target.albumCover;
                   target.lyrics = statusData.lyrics || target.lyrics || lyricsText || '';
                   if (statusData.title) target.title = statusData.title;
                   if (statusData.audioId) target.audioId = statusData.audioId;
-                  target.audioId2 = null;
+                  target.audioId2 = statusData.audioId2 || null;
+                  updatedItem = target;
                 }
-                localStorage.setItem('nzembo_user_songs', JSON.stringify(userSongs));
+                if (typeof persistUserSongs === 'function') persistUserSongs(userSongs);
                 if (typeof renderAllSongs === 'function') renderAllSongs();
                 if (typeof renderRecentSongs === 'function') renderRecentSongs();
+                if (typeof renderShorts === 'function') renderShorts();
+              }
+
+              if (updatedItem && window.NzemboBackend && typeof window.NzemboBackend.updateCreation === 'function') {
+                window.NzemboBackend.updateCreation(updatedItem.id || taskId, {
+                  status: 'termine',
+                  isProcessing: false,
+                  audioUrl: updatedItem.audioUrl,
+                  audioUrl2: updatedItem.audioUrl2,
+                  albumCover: updatedItem.albumCover,
+                  coverUrl: updatedItem.coverUrl,
+                  title: updatedItem.title,
+                  lyrics: updatedItem.lyrics,
+                  audioId: updatedItem.audioId
+                }).catch(() => {});
               }
 
               // Mettre à jour le store si dispo
@@ -11590,8 +11714,9 @@
                   target.hasFailed = true;
                   target.errorMessage = statusData.message || 'Échec de la génération sur le moteur audio.';
                 }
-                localStorage.setItem('nzembo_user_songs', JSON.stringify(userSongs));
+                if (typeof persistUserSongs === 'function') persistUserSongs(userSongs);
                 if (typeof renderAllSongs === 'function') renderAllSongs();
+                if (typeof renderRecentSongs === 'function') renderRecentSongs();
               }
               triggerToast('La génération de la chanson « ' + (titleText || 'en cours') + ' » a rencontré une erreur serveur.', 'error');
               return;
@@ -11626,17 +11751,27 @@
               clearInterval(bgTimer);
               delete window._activeBackgroundPollers[taskId];
 
+              let updatedVid = null;
               if (window.userSongs && Array.isArray(userSongs)) {
                 const target = userSongs.find(s => s.taskId === taskId || s.id === songId);
                 if (target) {
                   target.isProcessing = false;
                   target.videoUrl = statusData.videoUrl;
                   target.audioUrl = '';
+                  updatedVid = target;
                 }
-                localStorage.setItem('nzembo_user_songs', JSON.stringify(userSongs));
+                if (typeof persistUserSongs === 'function') persistUserSongs(userSongs);
                 if (typeof renderAllSongs === 'function') renderAllSongs();
                 if (typeof renderRecentSongs === 'function') renderRecentSongs();
                 if (typeof renderShorts === 'function') renderShorts();
+              }
+              if (updatedVid && window.NzemboBackend && typeof window.NzemboBackend.updateCreation === 'function') {
+                window.NzemboBackend.updateCreation(updatedVid.id || taskId, {
+                  status: 'termine',
+                  isProcessing: false,
+                  videoUrl: updatedVid.videoUrl,
+                  audioUrl: ''
+                }).catch(() => {});
               }
 
               triggerToast('Ta vidéo MP4 « ' + (titleText || 'Clip') + ' » est prête.', 'success');
@@ -11653,8 +11788,9 @@
                   target.hasFailed = true;
                   target.errorMessage = statusData.message || 'Échec de la génération vidéo sur le serveur.';
                 }
-                localStorage.setItem('nzembo_user_songs', JSON.stringify(userSongs));
+                if (typeof persistUserSongs === 'function') persistUserSongs(userSongs);
                 if (typeof renderAllSongs === 'function') renderAllSongs();
+                if (typeof renderRecentSongs === 'function') renderRecentSongs();
                 if (typeof renderShorts === 'function') renderShorts();
               }
               triggerToast('La génération de la vidéo « ' + (titleText || 'en cours') + ' » a échoué.', 'error');
@@ -11698,9 +11834,7 @@
           }
         });
         if (modified) {
-          try { localStorage.setItem('nzembo_user_songs', JSON.stringify(userSongs)); } catch(e){}
-
-
+          if (typeof persistUserSongs === 'function') persistUserSongs(userSongs);
           if (typeof renderAllSongs === 'function') renderAllSongs();
           if (typeof renderRecentSongs === 'function') renderRecentSongs();
           if (typeof renderShorts === 'function') renderShorts();
@@ -12570,10 +12704,11 @@
             window.userSongs.unshift(lyricsItemNote);
           }
           userSongs = window.userSongs;
-          try { localStorage.setItem('nzembo_user_songs', JSON.stringify(userSongs)); } catch (e) {}
+          if (typeof persistUserSongs === 'function') persistUserSongs(userSongs);
           if (window.NzemboBackend && typeof window.NzemboBackend.saveCreation === 'function') {
             window.NzemboBackend.saveCreation(lyricsItemNote).catch(() => {});
           }
+          if (typeof renderRecentSongs === 'function') renderRecentSongs();
           if (typeof renderAllSongs === 'function') renderAllSongs();
           triggerToast('Paroles enregistrées dans Mes créations.', 'success');
         } else if (currentActiveStudioToolKey === 'cover_art') {
@@ -12742,9 +12877,7 @@
           if (window.userSongs) {
             window.userSongs = userSongs.filter(s => s.id !== _rtTaskId && s.taskId !== _rtTaskId);
             userSongs = window.userSongs;
-            try { localStorage.setItem('nzembo_user_songs', JSON.stringify(userSongs)); } catch(e){}
-
-
+            if (typeof persistUserSongs === 'function') persistUserSongs(userSongs);
           }
           if (window.NzemboBackend && typeof window.NzemboBackend.deleteCreation === 'function') {
             window.NzemboBackend.deleteCreation(_rtTaskId).catch(() => {});
@@ -12773,9 +12906,8 @@
         if (window.userSongs) {
           window.userSongs = userSongs.filter(s => s.id !== _rtTaskId && s.taskId !== _rtTaskId);
           userSongs = window.userSongs;
-          try { localStorage.setItem('nzembo_user_songs', JSON.stringify(userSongs)); } catch(e){}
-
-
+          if (typeof persistUserSongs === 'function') persistUserSongs(userSongs);
+          if (typeof renderRecentSongs === 'function') renderRecentSongs();
           if (typeof renderAllSongs === 'function') renderAllSongs();
           if (typeof renderShorts === 'function') renderShorts();
         }
@@ -12797,8 +12929,7 @@
             trackedItem.audioId = taskResult.sourceAudioId;
           }
           if (safeSongMeta.lyrics && !trackedItem.lyrics) trackedItem.lyrics = safeSongMeta.lyrics;
-          try { localStorage.setItem('nzembo_user_songs', JSON.stringify(userSongs)); } catch(e){}
-
+          if (typeof persistUserSongs === 'function') persistUserSongs(userSongs);
 
           if (window.NzemboBackend && typeof window.NzemboBackend.updateCreation === 'function') {
             window.NzemboBackend.updateCreation(_rtTaskId, {
@@ -13033,9 +13164,8 @@
             if (window.userSongs) {
               window.userSongs = userSongs.filter(s => s.id !== _rtTaskId && s.taskId !== _rtTaskId && s.taskId !== taskId);
               userSongs = window.userSongs;
-              try { localStorage.setItem('nzembo_user_songs', JSON.stringify(userSongs)); } catch(e){}
-
-
+              if (typeof persistUserSongs === 'function') persistUserSongs(userSongs);
+              if (typeof renderRecentSongs === 'function') renderRecentSongs();
               if (typeof renderAllSongs === 'function') renderAllSongs();
               if (typeof renderShorts === 'function') renderShorts();
             }
@@ -14226,41 +14356,59 @@
       const container = document.getElementById('home-recent-songs');
       if (!container) return;
 
-      const allList = (window.userSongs && Array.isArray(window.userSongs)) ? window.userSongs : (userSongs || []);
-      // STRICT FILTER: Uniquement des fichiers audio jouables (exclure vidéos MP4, pochettes d'album et paroles seules)
-      const audioSongs = allList.filter(s => {
-        if (!s) return false;
-        if (s.toolCategory === 'video' || s.fileType === 'video' || s.type === 'video') return false;
-        if (s.toolCategory === 'cover_art' || s.fileType === 'image' || s.type === 'cover_art') return false;
-        if (s.toolCategory === 'lyrics_gen' || s.fileType === 'lyrics' || s.type === 'lyrics_gen') return false;
-        return Boolean(s.audioUrl || s.audio_url || s.audioUrl2 || s.vocalUrl || s.instrumentalUrl);
+      const rawList = (window.userSongs && Array.isArray(window.userSongs)) ? window.userSongs : (userSongs || []);
+      const allList = (typeof sanitizeCreationList === 'function') ? sanitizeCreationList(rawList) : rawList;
+      const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+
+      const recentSongs = allList.filter(s => {
+        if (!s || s.hasFailed) return false;
+        const cat = (typeof getCanonicalToolCategory === 'function') ? getCanonicalToolCategory(s) : String(s.toolCategory || 'generation');
+        const hasAudio = Boolean(s.audioUrl || s.audio_url || s.audioUrl2 || s.vocalUrl || s.instrumentalUrl);
+        const hasVideo = Boolean(s.videoUrl || s.video_url || (s.metadata && s.metadata.videoUrl));
+        const hasCover = Boolean(s.albumCover || s.coverUrl || s.cover_url);
+        if (cat === 'video') return Boolean(hasVideo || s.isProcessing);
+        if (cat === 'cover_art') return Boolean(hasCover || s.isProcessing);
+        if (cat === 'lyrics_gen') return Boolean(s.lyrics || s.prompt);
+        return Boolean(hasAudio || hasVideo || s.isProcessing);
       });
 
-      const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
-      if (audioSongs.length === 0) {
-        container.innerHTML = `<p class="text-xs text-slate-400 py-3 text-center">${isEn ? 'No songs in recent history.' : 'Aucune chanson dans l\'historique récent.'}</p>`;
-        const statCount = document.getElementById('stat-song-count');
-        if (statCount) statCount.textContent = '0';
+      const statCount = document.getElementById('stat-song-count');
+      const totalActiveCreations = allList.filter(s => s && !s.hasFailed && ((typeof getCanonicalToolCategory === 'function') ? getCanonicalToolCategory(s) !== 'lyrics_gen' : true)).length;
+      if (statCount) statCount.textContent = String(totalActiveCreations);
+
+      if (recentSongs.length === 0) {
+        container.innerHTML = `<p class="text-xs text-slate-400 py-3 text-center col-span-full">${isEn ? 'No creations in recent history yet.' : 'Aucune création dans l\'historique récent.'}</p>`;
         return;
       }
 
       const realAudio = document.getElementById('real-nzembo-audio');
       const activeId = window._activePlayingSongId ? String(window._activePlayingSongId) : '';
 
-      container.innerHTML = audioSongs.slice(0, 4).map(s => {
+      const catLabels = isEn
+        ? { generation: 'Composition', reprise: 'Cover', remix: 'Remix', stems: 'Stems', extend: 'Extension', sing_instru: 'Vocals on Beat', instru_on_voice: 'Beat on Vocals', sing_vocal: 'Harmony', wav: 'WAV Master', video: 'MP4 Video', cover_art: 'Cover Art', lyrics_gen: 'Lyrics' }
+        : { generation: 'Composition', reprise: 'Reprise', remix: 'Remix', stems: 'Stems', extend: 'Extension', sing_instru: 'Voix/Instru', instru_on_voice: 'Instru/Voix', sing_vocal: 'Harmonisation', wav: 'Export WAV', video: 'Vidéo MP4', cover_art: 'Pochette', lyrics_gen: 'Paroles' };
+
+      container.innerHTML = recentSongs.slice(0, 6).map(s => {
+        const itemCat = (typeof getCanonicalToolCategory === 'function') ? getCanonicalToolCategory(s) : String(s.toolCategory || 'generation');
         const coverSrc = s.albumCover || s.coverUrl || s.cover_url || (typeof getDefaultSongCover === 'function' ? getDefaultSongCover(s.style, s.occasion) : '');
         const songAudio = s.audioUrl || s.audio_url || s.audioUrl2 || s.vocalUrl || s.instrumentalUrl || '';
+        const videoSrc = s.videoUrl || s.video_url || (s.metadata && s.metadata.videoUrl) || '';
+        const isVideo = itemCat === 'video' || Boolean(videoSrc && !songAudio);
+        const isCoverOnly = itemCat === 'cover_art';
+        const isLyricsOnly = itemCat === 'lyrics_gen';
         const rawSongId = String(s.id || s.taskId || '');
         const escapedAudio = (songAudio || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-        const escapedTitle = (s.title || 'Chanson Nzembo').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const escapedVideo = (videoSrc || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const escapedTitle = (s.title || 'Création Nzembo').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         const escapedArtist = (s.recipient ? ((isEn ? 'For ' : 'Pour ') + s.recipient) : (s.artist || 'Nzembo')).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         const escapedCover = (coverSrc || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         const escapedSongId = rawSongId.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-        const escapedToolCat = String(s.toolCategory || 'generation').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-        const durLabel = escapeHtml(s.durationFormatted || s.durationStr || s.duration || '2:45');
+        const escapedToolCat = String(itemCat || 'generation').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const durLabel = escapeHtml(s.durationFormatted || s.durationStr || (isVideo ? 'MP4' : (isCoverOnly ? 'HD' : (isLyricsOnly ? 'Note' : (s.duration || '2:45')))));
+        const tagLabel = s.style || catLabels[itemCat] || (isEn ? 'Music' : 'Musique');
 
         let isCurrentPlaying = false;
-        if (realAudio && !realAudio.paused && realAudio.getAttribute('src')) {
+        if (!isVideo && realAudio && !realAudio.paused && realAudio.getAttribute('src')) {
           if (activeId && rawSongId) {
             isCurrentPlaying = (activeId === rawSongId);
           } else if (!activeId && songAudio && typeof isMatchingAudioTrackUrl === 'function') {
@@ -14268,38 +14416,65 @@
           }
         }
 
+        let thumbOverlayHtml = '';
+        if (s.isProcessing) {
+          thumbOverlayHtml = `
+            <div class="absolute inset-0 bg-black/50 flex items-center justify-center">
+              <span class="w-5 h-5 border-2 border-[#F5B83D] border-t-transparent rounded-full animate-spin"></span>
+            </div>`;
+        } else if (isVideo && videoSrc) {
+          thumbOverlayHtml = `
+            <button type="button" onclick="event.stopPropagation(); openDirectVideoModal('${escapedVideo}', '${escapedTitle}', '${escapedSongId}')" class="absolute inset-0 bg-black/45 hover:bg-black/60 text-white flex items-center justify-center transition-colors cursor-pointer" title="${isEn ? 'Play Video' : 'Lire la vidéo'}">
+              ${SVG_PLAY_ICON}
+            </button>`;
+        } else if (isCoverOnly && coverSrc) {
+          thumbOverlayHtml = `
+            <button type="button" onclick="event.stopPropagation(); openFullCoverViewer('${escapedCover}', '${escapedSongId}')" class="absolute inset-0 bg-black/25 hover:bg-black/45 text-white flex items-center justify-center transition-colors cursor-pointer" title="${isEn ? 'View Cover' : 'Voir la pochette'}">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+            </button>`;
+        } else if (isLyricsOnly) {
+          thumbOverlayHtml = `
+            <div class="w-full h-full flex items-center justify-center bg-[var(--nz-accent-soft)] text-[var(--nz-accent)]">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            </div>`;
+        } else if (songAudio) {
+          thumbOverlayHtml = `
+            <button type="button" onclick="event.stopPropagation(); togglePlayHomeSong('${escapedAudio}', '${escapedTitle}', '${escapedArtist}', '${escapedCover}', this, '${escapedSongId}')" data-song-id="${escapeHtmlAttr(rawSongId)}" data-audio-url="${escapeHtmlAttr(songAudio)}" class="home-song-play-btn absolute inset-0 bg-black/45 hover:bg-black/60 text-white flex items-center justify-center transition-colors cursor-pointer" title="${isCurrentPlaying ? (isEn ? 'Pause' : 'Mettre en pause') : (isEn ? 'Play' : 'Écouter')}">
+              ${isCurrentPlaying ? SVG_PAUSE_ICON : SVG_PLAY_ICON}
+            </button>`;
+        }
+
+        const dlMedia = videoSrc || songAudio || (isCoverOnly ? coverSrc : '');
+        const dlExt = isVideo ? '.mp4' : (isCoverOnly ? '.png' : '.mp3');
+
         return `
         <div onclick="navigateToSongInCreations('${escapedSongId}', '${escapedToolCat}')" class="cursor-pointer bg-[var(--nz-surface)] p-3 rounded-[12px] border border-[var(--nz-border)] flex items-center justify-between gap-3 hover:border-[var(--nz-accent)]/60 transition-colors">
           <div class="flex items-center gap-3 min-w-0 flex-1">
             <div class="relative w-[60px] h-[60px] rounded-[10px] overflow-hidden flex-shrink-0 border border-[var(--nz-border)] bg-[var(--nz-track)]">
-              <img src="${escapeHtmlAttr(coverSrc)}" alt="Cover" class="w-full h-full object-cover">
-              <button type="button" onclick="event.stopPropagation(); togglePlayHomeSong('${escapedAudio}', '${escapedTitle}', '${escapedArtist}', '${escapedCover}', this, '${escapedSongId}')" data-song-id="${escapeHtmlAttr(rawSongId)}" data-audio-url="${escapeHtmlAttr(songAudio)}" class="home-song-play-btn absolute inset-0 bg-black/45 hover:bg-black/60 text-white flex items-center justify-center transition-colors cursor-pointer" title="${isCurrentPlaying ? (isEn ? 'Pause' : 'Mettre en pause') : (isEn ? 'Play' : 'Écouter')}">
-                ${isCurrentPlaying ? SVG_PAUSE_ICON : SVG_PLAY_ICON}
-              </button>
+              ${!isLyricsOnly ? `<img src="${escapeHtmlAttr(coverSrc)}" alt="Cover" class="w-full h-full object-cover">` : ''}
+              ${thumbOverlayHtml}
             </div>
             <div class="min-w-0 flex-1">
-              <p class="text-xs sm:text-sm font-bold text-[var(--nz-text)] truncate leading-tight">${escapeHtml(s.title || (isEn ? 'Untitled Song' : 'Chanson sans titre'))}</p>
-              <div class="flex items-center gap-2 mt-1">
-                <span class="text-[10px] px-2 py-0.5 rounded-[6px] bg-[var(--nz-track)] text-[var(--nz-text)] font-medium truncate max-w-[140px]">${escapeHtml(s.style || (isEn ? 'Music' : 'Musique'))}</span>
-                <span class="text-[10px] font-mono text-[var(--nz-muted)]">${durLabel}</span>
+              <p class="text-xs sm:text-sm font-bold text-[var(--nz-text)] truncate leading-tight">${escapeHtml(s.title || (isEn ? 'Untitled Creation' : 'Création sans titre'))}</p>
+              <div class="flex items-center gap-1.5 mt-1">
+                <span class="text-[10px] px-2 py-0.5 rounded-[6px] bg-[var(--nz-track)] text-[var(--nz-text)] font-medium truncate max-w-[130px]">${escapeHtml(tagLabel)}</span>
+                <span class="text-[10px] font-mono text-[var(--nz-muted)]">${s.isProcessing ? (isEn ? 'Processing...' : 'En cours...') : durLabel}</span>
               </div>
             </div>
           </div>
-          ${songAudio ? `
-          <a href="${escapeHtmlAttr(songAudio)}" download="${escapeHtmlAttr((s.title || 'nzembo') + '.mp3')}" onclick="event.stopPropagation()" class="p-2 rounded-[8px] border border-[var(--nz-border)] text-[var(--nz-muted)] hover:text-[var(--nz-text)] hover:bg-[var(--nz-track)] flex-shrink-0 transition-colors" title="Télécharger" aria-label="Télécharger">
+          ${(dlMedia && !s.isProcessing) ? `
+          <a href="${escapeHtmlAttr(dlMedia)}" download="${escapeHtmlAttr((s.title || 'nzembo') + dlExt)}" onclick="event.stopPropagation()" class="p-2 rounded-[8px] border border-[var(--nz-border)] text-[var(--nz-muted)] hover:text-[var(--nz-text)] hover:bg-[var(--nz-track)] flex-shrink-0 transition-colors" title="Télécharger" aria-label="Télécharger">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </a>` : ''}
         </div>`;
       }).join('');
-
-      const statCount = document.getElementById('stat-song-count');
-      if (statCount) statCount.textContent = audioSongs.length;
     }
 
-    // Classification canonique stricte 1-à-1 selon les 12 outils de la plateforme (aucun mélange entre catégories)
+    // Classification canonique stricte selon les outils de la plateforme
     function normalizeCreationCat(rawCat) {
       const cat = String(rawCat || '').toLowerCase().trim();
-      if (!cat || cat === 'all' || cat === 'generation' || cat === 'composition' || cat === 'compositions' || cat === 'music' || cat === 'song' || cat === 'audio' || cat === 'wizard' || cat === 'create') return 'generation';
+      if (!cat || cat === 'all' || cat === 'tous') return 'all';
+      if (cat === 'generation' || cat === 'composition' || cat === 'compositions' || cat === 'music' || cat === 'song' || cat === 'audio' || cat === 'wizard' || cat === 'create') return 'generation';
       if (cat === 'reprise' || cat === 'reprises' || cat === 'cover' || cat === 'covers' || cat === 'voice-conversion' || cat === 'upload_cover') return 'reprise';
       if (cat === 'remix' || cat === 'remixes' || cat === 'club') return 'remix';
       if (cat === 'stems' || cat === 'stem' || cat === 'extraction' || cat === 'separation' || cat === 'vocal_removal') return 'stems';
@@ -14416,7 +14591,7 @@
     }
 
     // Filter creations by tool category
-    let activeCreationsFilter = 'generation';
+    let activeCreationsFilter = 'all';
     window.activeCreationsFilter = activeCreationsFilter;
     function filterCreations(cat) {
       const normalized = normalizeCreationCat(cat);
@@ -14436,7 +14611,7 @@
     window.filterCreations = filterCreations;
     window.renderAllSongs = renderAllSongs;
 
-    // RENDER ALL SONGS (MES CRÉATIONS - 12 CATÉGORIES STRICTES & CARTES INTERACTIVES COMPLÈTES)
+    // RENDER ALL SONGS (MES CRÉATIONS - TOUS + 12 CATÉGORIES & CARTES INTERACTIVES COMPLÈTES)
     function renderAllSongs() {
       const container = document.getElementById('all-songs-list');
       if (!container) return;
@@ -14451,6 +14626,7 @@
       function matchCreationCategory(s, cat) {
         if (!s || s.hasFailed) return false;
         const targetKey = normalizeCreationCat(cat);
+        if (targetKey === 'all') return true;
         const itemKey = getCanonicalToolCategory(s);
         return itemKey === targetKey;
       }
@@ -14468,8 +14644,9 @@
       const homeCount = document.getElementById('stat-song-count');
       if (homeCount) homeCount.textContent = String(musicSongsCount);
 
-      // Mettre à jour les libellés et compteurs des 12 boutons de catégories
+      // Mettre à jour les libellés et compteurs de Tous + les 12 boutons de catégories
       const categoryFilterButtons = [
+        { id: 'filter-all', label: isEn ? 'All' : 'Tous', cat: 'all' },
         { id: 'filter-generation', label: isEn ? 'Compositions' : 'Compositions', cat: 'generation' },
         { id: 'filter-reprise', label: isEn ? 'Covers' : 'Reprises', cat: 'reprise' },
         { id: 'filter-remix', label: isEn ? 'Remix' : 'Remix', cat: 'remix' },
@@ -14484,7 +14661,7 @@
         { id: 'filter-lyrics_gen', label: isEn ? 'Lyrics Generator' : 'Paroles', cat: 'lyrics_gen' }
       ];
 
-      const currentFilter = normalizeCreationCat(typeof activeCreationsFilter !== 'undefined' ? activeCreationsFilter : 'generation');
+      const currentFilter = normalizeCreationCat(typeof activeCreationsFilter !== 'undefined' ? activeCreationsFilter : 'all');
       activeCreationsFilter = currentFilter;
       window.activeCreationsFilter = currentFilter;
 
@@ -14513,11 +14690,11 @@
       }
 
       if (displaySongs.length === 0) {
-        const emptyToolLaunch = (currentFilter === 'generation') ? "switchTab('create')" : `openStudioModal('${currentFilter === 'stems' ? 'extraction' : currentFilter}')`;
+        const emptyToolLaunch = (currentFilter === 'all' || currentFilter === 'generation') ? "switchTab('create')" : `openStudioModal('${currentFilter === 'stems' ? 'extraction' : currentFilter}')`;
         container.innerHTML = `
           <div class="col-span-full text-center py-10 bg-[var(--nz-surface)] rounded-2xl border border-[var(--nz-border)] p-6 space-y-2">
-            <p class="text-sm font-bold text-slate-800 dark:text-white">${isLyricsCategory ? (isEn ? 'No saved lyrics notes' : 'Aucune note de paroles enregistrée') : (isEn ? 'No creations in this category' : 'Aucune création dans cette catégorie')}</p>
-            <p class="text-xs text-slate-500 dark:text-slate-400">${isLyricsCategory ? (isEn ? 'Use the AI Lyrics Generator tool to write your songs.' : 'Utilise l\'outil Paroles IA pour rédiger tes chansons.') : (isEn ? 'Start a new creation to populate this category.' : 'Démarre une nouvelle création pour alimenter cette catégorie.')}</p>
+            <p class="text-sm font-bold text-slate-800 dark:text-white">${isLyricsCategory ? (isEn ? 'No saved lyrics notes' : 'Aucune note de paroles enregistrée') : (isEn ? 'No creations yet' : (currentFilter === 'all' ? 'Aucune création enregistrée' : 'Aucune création dans cette catégorie'))}</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400">${isLyricsCategory ? (isEn ? 'Use the AI Lyrics Generator tool to write your songs.' : 'Utilise l\'outil Paroles IA pour rédiger tes chansons.') : (isEn ? 'Start a new creation to populate your library.' : 'Démarre une nouvelle création pour alimenter ta bibliothèque.')}</p>
             <button onclick="${emptyToolLaunch}" class="btn-gradient px-4 py-2 rounded-xl text-xs font-bold mt-1 shadow-xs cursor-pointer">
               ${isLyricsCategory ? (isEn ? 'Write Lyrics' : 'Créer des paroles') : (isEn ? 'Start Creating' : 'Démarrer une création')}
             </button>
@@ -14625,6 +14802,56 @@
       container.innerHTML = displaySongs.map(s => {
         try {
           const itemCat = getCanonicalToolCategory(s);
+          const itemId = String(s.id || s.taskId || '');
+          const statsBadgeHtml = getCreatorExplorerStatsHtml(itemId);
+
+          if (itemCat === 'cover_art') {
+            const covSrc = s.albumCover || s.coverUrl || s.cover_url || getDefaultSongCover(s.style, s.occasion);
+            const covTitle = s.title || (isEn ? 'Album Cover HD' : 'Pochette Album HD');
+            return `
+              <div id="song-card-${escapeHtmlAttr(itemId)}" class="bg-[var(--nz-surface)] p-3 sm:p-4 rounded-[12px] border border-[var(--nz-border)] flex items-center justify-between gap-3 hover:border-[var(--nz-accent)]/50 transition-colors">
+                <div class="flex items-center gap-3 min-w-0 flex-1 cursor-pointer" onclick="openFullCoverViewer('${escapeHtmlAttr(covSrc)}', '${escapeHtmlAttr(itemId)}')">
+                  <div class="w-[60px] h-[60px] rounded-[10px] overflow-hidden flex-shrink-0 border border-[var(--nz-border)] bg-[var(--nz-track)]">
+                    <img src="${escapeHtmlAttr(covSrc)}" alt="Pochette" class="w-full h-full object-cover">
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <h3 class="text-xs sm:text-sm font-bold text-[var(--nz-text)] truncate">${escapeHtml(covTitle)}</h3>
+                    <span class="inline-block mt-1 text-[10px] px-2 py-0.5 rounded-[6px] bg-[var(--nz-track)] text-[var(--nz-text)] font-semibold">${isEn ? 'Cover Art HD' : 'Pochette HD'}</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1.5 flex-shrink-0">
+                  <a href="${escapeHtmlAttr(covSrc)}" download="${escapeHtmlAttr((covTitle || 'pochette') + '.png')}" onclick="event.stopPropagation()" class="p-2 rounded-[8px] border border-[var(--nz-border)] hover:bg-[var(--nz-track)] text-[var(--nz-muted)] hover:text-[var(--nz-text)] flex items-center justify-center transition-colors" title="${isEn ? 'Download' : 'Télécharger'}">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  </a>
+                  <button type="button" onclick="event.stopPropagation(); openMobileCardMenu('${escapeHtmlAttr(itemId)}')" class="p-2 rounded-[8px] border border-[var(--nz-border)] hover:bg-[var(--nz-track)] text-[var(--nz-muted)] hover:text-[var(--nz-text)] flex items-center justify-center cursor-pointer" title="${isEn ? 'Options' : 'Options'}">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+                  </button>
+                </div>
+              </div>
+            `;
+          }
+
+          if (itemCat === 'lyrics_gen') {
+            const rawLyr = s.lyrics || s.prompt || '';
+            const lyrTitle = s.title && s.title !== 'Paroles IA' ? s.title : 'Paroles Nzembo';
+            return `
+              <div id="note-card-${escapeHtmlAttr(itemId)}" onclick="openNoteEditor('${escapeHtmlAttr(itemId)}')" class="bg-[var(--nz-surface)] p-3 sm:p-4 rounded-[12px] border border-[var(--nz-border)] flex items-center justify-between gap-3 hover:border-[var(--nz-accent)]/50 transition-colors cursor-pointer">
+                <div class="flex items-center gap-3 min-w-0 flex-1">
+                  <div class="w-[60px] h-[60px] rounded-[10px] bg-[var(--nz-accent-soft)] text-[var(--nz-accent)] flex items-center justify-center flex-shrink-0">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <h3 class="text-xs sm:text-sm font-bold text-[var(--nz-text)] truncate">${escapeHtml(lyrTitle)}</h3>
+                    <p class="text-[11px] text-[var(--nz-muted)] truncate mt-0.5">${escapeHtml(String(rawLyr).replace(/\s+/g, ' ').slice(0, 90) || (isEn ? 'Lyrics note' : 'Note de paroles'))}</p>
+                  </div>
+                </div>
+                <button type="button" onclick="event.stopPropagation(); openMobileCardMenu('${escapeHtmlAttr(itemId)}')" class="p-2 rounded-[8px] border border-[var(--nz-border)] hover:bg-[var(--nz-track)] text-[var(--nz-muted)] hover:text-[var(--nz-text)] flex items-center justify-center cursor-pointer flex-shrink-0" title="${isEn ? 'Options' : 'Options'}">
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+                </button>
+              </div>
+            `;
+          }
+
           const coverSrc = s.albumCover || s.coverUrl || s.cover_url || getDefaultSongCover(s.style, s.occasion);
           const audioV1 = s.audioUrl || s.audio_url || '';
           const audioV2 = s.audioUrl2 || s.audio_url_2 || '';
@@ -14633,8 +14860,7 @@
           const videoSrc = s.videoUrl || s.video_url || s.mp4Url || (s.metadata && s.metadata.videoUrl) || '';
           const title = s.title || (isEn ? 'Untitled Song' : 'Chanson Nzembo');
           const artist = s.recipient ? ((isEn ? 'For ' : 'Pour ') + s.recipient) : (s.artist || 'Nzembo');
-          const style = s.style || (isEn ? 'Music' : 'Musique');
-          const itemId = String(s.id || s.taskId || '');
+          const style = s.style || (itemCat === 'video' ? (isEn ? 'MP4 Video' : 'Vidéo MP4') : (isEn ? 'Music' : 'Musique'));
           const isVideoCard = currentFilter === 'video' || itemCat === 'video';
           const isStemsCard = currentFilter === 'stems' || itemCat === 'stems';
           const progressPct = Math.max(8, Math.min(95, Number(s.progress) || 15));
@@ -14659,7 +14885,6 @@
             ? `openDirectVideoModal('${escapeHtmlAttr(videoSrc)}', '${escapeHtmlAttr(title)}', '${escapeHtmlAttr(itemId)}')`
             : `togglePlaySongCard('${escapeHtmlAttr(itemId)}', '${escapeHtmlAttr(mainAudio)}', '${escapeHtmlAttr(title)}', '${escapeHtmlAttr(artist)}', '${escapeHtmlAttr(coverSrc)}')`;
 
-          const statsBadgeHtml = getCreatorExplorerStatsHtml(itemId);
           const safeTitleJs = String(title || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
           return `
@@ -15435,6 +15660,9 @@
         document.getElementById('char-count').className = len < 10 ? 'text-xs text-rose-500' : 'text-xs text-slate-400';
       });
 
+      // Capture et persistance automatique du code d'invitation / parrainage (?ref=CODE ou /invite/CODE)
+      const detectedReferralCode = applyReferralCodeToForm(false);
+
       // VÉRIFICATION D'UN RETOUR DE PAIEMENT SASPAY (?payment=saspay&order_id=...)
       const urlParams = new URLSearchParams(window.location.search);
       const saspayPaymentParam = urlParams.get('payment');
@@ -15610,13 +15838,17 @@
                   showResetPasswordModal();
                 }
               } else if (event === 'SIGNED_OUT') {
-                showAuthModal();
+                showAuthModal(resolveCapturedReferralCode() ? 'register' : 'login');
               }
             });
           }
         } else if (!currentUser) {
-          showAuthModal();
+          showAuthModal(detectedReferralCode ? 'register' : null);
         }
+      }
+
+      if (detectedReferralCode && !(window.NzemboBackend && typeof window.NzemboBackend.getCurrentUser === 'function' && window.NzemboBackend.getCurrentUser())) {
+        applyReferralCodeToForm(true);
       }
     });
   

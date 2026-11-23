@@ -335,38 +335,70 @@ app.post('/api/users/sync', async (req, res) => {
 
     const isNewSignup = Boolean(body.isNewSignup);
     const name = String(body.name || sbUser?.user_metadata?.full_name || sbUser?.user_metadata?.name || email.split('@')[0]).trim();
-    const refCode = String(body.referral_code || sbUser?.user_metadata?.referral_code || ('NZ-' + uid.slice(0, 5).toUpperCase()));
-    const referredBy = body.referred_by || sbUser?.user_metadata?.referral_code_used || null;
+    const refCode = String(body.referral_code || sbUser?.user_metadata?.referral_code || ('NZ-' + uid.slice(0, 5).toUpperCase())).trim().toUpperCase();
+    let rawReferredBy = String(body.referred_by || body.referralCodeUsed || sbUser?.user_metadata?.referral_code_used || '').trim().toUpperCase();
+    if (rawReferredBy && rawReferredBy === refCode) {
+      rawReferredBy = '';
+    }
+    const referredBy = rawReferredBy || null;
 
     const existing = await query(`SELECT * FROM users WHERE id = $1 OR LOWER(email) = LOWER($2) LIMIT 1`, [uid, email]);
+    let savedUser = null;
     if (existing.rows.length > 0) {
       const row = existing.rows[0];
       const upd = await query(
-        `UPDATE users SET id = $1, name = COALESCE(NULLIF($2, ''), name), email = $3 WHERE id = $4 RETURNING *`,
-        [uid, name, email, row.id]
+        `UPDATE users SET id = $1, name = COALESCE(NULLIF($2, ''), name), email = $3, referral_code = COALESCE(NULLIF(referral_code, ''), $5), referred_by = COALESCE(NULLIF(referred_by, ''), $6) WHERE id = $4 RETURNING *`,
+        [uid, name, email, row.id, refCode, referredBy]
       );
-      return res.json({ success: true, user: upd.rows[0], credits: Number(upd.rows[0].credits) || 0 });
-    }
-
-    // Nouvel enregistrement : TOUJOURS initialiser à 0 crédit. Pour un compte historique préexistant, préserver ses crédits connus (sauf défaut 3 jamais rechargé sur compte tout neuf).
-    let initialCredits = 0;
-    if (!isNewSignup && sbUser) {
-      const createdAtMs = new Date(sbUser.created_at || 0).getTime();
-      const accountAgeSec = (Date.now() - createdAtMs) / 1000;
-      const cand = Math.max(0, Number(body.existingProfileCredits) || 0);
-      if (accountAgeSec > 300 && cand > 0) {
-        initialCredits = cand;
+      savedUser = upd.rows[0];
+    } else {
+      // Nouvel enregistrement : TOUJOURS initialiser à 0 crédit. Pour un compte historique préexistant, préserver ses crédits connus (sauf défaut 3 jamais rechargé sur compte tout neuf).
+      let initialCredits = 0;
+      if (!isNewSignup && sbUser) {
+        const createdAtMs = new Date(sbUser.created_at || 0).getTime();
+        const accountAgeSec = (Date.now() - createdAtMs) / 1000;
+        const cand = Math.max(0, Number(body.existingProfileCredits) || 0);
+        if (accountAgeSec > 300 && cand > 0) {
+          initialCredits = cand;
+        }
       }
+
+      const ins = await query(
+        `INSERT INTO users (id, name, email, credits, country, referral_code, referred_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (id) DO UPDATE SET
+           email = EXCLUDED.email,
+           name = EXCLUDED.name,
+           referral_code = COALESCE(NULLIF(users.referral_code, ''), EXCLUDED.referral_code),
+           referred_by = COALESCE(NULLIF(users.referred_by, ''), EXCLUDED.referred_by)
+         RETURNING *`,
+        [uid, name, email, initialCredits, body.country || 'RD Congo', refCode, referredBy]
+      );
+      savedUser = ins.rows[0];
     }
 
-    const ins = await query(
-      `INSERT INTO users (id, name, email, credits, country, referral_code, referred_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, name = EXCLUDED.name
-       RETURNING *`,
-      [uid, name, email, initialCredits, body.country || 'RD Congo', refCode, referredBy]
-    );
-    return res.json({ success: true, user: ins.rows[0], credits: Number(ins.rows[0].credits) || 0 });
+    const effectiveRefCode = String((savedUser && savedUser.referral_code) || refCode || '').trim().toUpperCase();
+    let friendsInvited = 0;
+    if (effectiveRefCode) {
+      const refCnt = await query(
+        `SELECT COUNT(*)::int AS cnt FROM users WHERE (UPPER(referred_by) = UPPER($1) OR referred_by = $2) AND id <> $2`,
+        [effectiveRefCode, uid]
+      ).catch(() => ({ rows: [{ cnt: 0 }] }));
+      friendsInvited = (refCnt.rows[0] && Number(refCnt.rows[0].cnt)) || 0;
+    }
+    const referralCredits = Math.max(0, Number(savedUser && savedUser.referral_credits) || 0);
+
+    return res.json({
+      success: true,
+      user: savedUser,
+      credits: Number(savedUser && savedUser.credits) || 0,
+      referred_by: (savedUser && savedUser.referred_by) || null,
+      referralStats: {
+        friendsInvited,
+        creditsEarned: referralCredits,
+        cashEarnedUSD: +(referralCredits * 0.25).toFixed(2)
+      }
+    });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -462,37 +494,120 @@ app.post('/api/songs', async (req, res) => {
     const s = req.body || {};
     if (!s.id && !s.taskId) return res.status(400).json({ success: false, error: 'id ou taskId requis.' });
     const rowId = String(s.id || s.taskId);
+    const coverVal = String(s.albumCover || s.coverUrl || s.cover_url || s.album_cover || '');
+    const metaJson = (s.metadata && typeof s.metadata === 'object') ? JSON.stringify(s.metadata) : '{}';
     await query(
-      `INSERT INTO songs (id, user_id, title, style, occasion, recipient, lyrics, audio_url, video_url, cover_url, task_id, audio_id, tool_category, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      `INSERT INTO songs (id, user_id, title, style, occasion, recipient, lyrics, prompt, audio_url, audio_url_2, video_url, vocal_url, instrumental_url, cover_url, album_cover, task_id, audio_id, audio_id_2, tool_category, status, metadata, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21::jsonb, CURRENT_TIMESTAMP)
        ON CONFLICT (id) DO UPDATE SET
+         user_id = COALESCE(NULLIF(EXCLUDED.user_id, ''), songs.user_id),
          title = COALESCE(NULLIF(EXCLUDED.title, ''), songs.title),
+         style = COALESCE(NULLIF(EXCLUDED.style, ''), songs.style),
          audio_url = COALESCE(NULLIF(EXCLUDED.audio_url, ''), songs.audio_url),
+         audio_url_2 = COALESCE(NULLIF(EXCLUDED.audio_url_2, ''), songs.audio_url_2),
          video_url = COALESCE(NULLIF(EXCLUDED.video_url, ''), songs.video_url),
+         vocal_url = COALESCE(NULLIF(EXCLUDED.vocal_url, ''), songs.vocal_url),
+         instrumental_url = COALESCE(NULLIF(EXCLUDED.instrumental_url, ''), songs.instrumental_url),
          cover_url = COALESCE(NULLIF(EXCLUDED.cover_url, ''), songs.cover_url),
+         album_cover = COALESCE(NULLIF(EXCLUDED.album_cover, ''), songs.album_cover),
          lyrics = COALESCE(NULLIF(EXCLUDED.lyrics, ''), songs.lyrics),
+         prompt = COALESCE(NULLIF(EXCLUDED.prompt, ''), songs.prompt),
+         task_id = COALESCE(NULLIF(EXCLUDED.task_id, ''), songs.task_id),
          audio_id = COALESCE(NULLIF(EXCLUDED.audio_id, ''), songs.audio_id),
-         status = COALESCE(NULLIF(EXCLUDED.status, ''), songs.status)`,
+         audio_id_2 = COALESCE(NULLIF(EXCLUDED.audio_id_2, ''), songs.audio_id_2),
+         tool_category = COALESCE(NULLIF(EXCLUDED.tool_category, ''), songs.tool_category),
+         status = COALESCE(NULLIF(EXCLUDED.status, ''), songs.status),
+         metadata = COALESCE(songs.metadata, '{}'::jsonb) || COALESCE(EXCLUDED.metadata, '{}'::jsonb),
+         updated_at = CURRENT_TIMESTAMP`,
       [
         rowId,
-        s.userId || s.user_id || '',
-        s.title || 'Création Nzembo',
-        s.style || '',
-        s.occasion || '',
-        s.recipient || '',
+        String(s.userId || s.user_id || '').trim(),
+        String(s.title || 'Création Nzembo').slice(0, 255),
+        String(s.style || '').slice(0, 100),
+        String(s.occasion || '').slice(0, 100),
+        String(s.recipient || '').slice(0, 150),
         s.lyrics || '',
+        s.prompt || '',
         s.audioUrl || s.audio_url || '',
+        s.audioUrl2 || s.audio_url_2 || '',
         s.videoUrl || s.video_url || '',
-        s.albumCover || s.coverUrl || s.cover_url || '',
+        s.vocalUrl || s.vocal_url || '',
+        s.instrumentalUrl || s.instrumental_url || '',
+        coverVal,
+        coverVal,
         s.taskId || s.task_id || rowId,
         s.audioId || s.audio_id || '',
+        s.audioId2 || s.audio_id_2 || '',
         s.toolCategory || s.tool_category || 'generation',
         s.status || 'processing',
+        metaJson,
       ]
     );
     return res.json({ success: true, id: rowId });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Suppression création dans Neon PostgreSQL + Explorer associé
+app.delete('/api/songs/:id', async (req, res) => {
+  try {
+    await ensureDbReady();
+    const id = String(req.params.id || '').trim();
+    if (!id) return res.status(400).json({ success: false, error: 'id requis.' });
+    await query('DELETE FROM songs WHERE id = $1 OR task_id = $1', [id]);
+    await query('DELETE FROM explorer_posts WHERE id = $1 OR original_song_id = $1', [id]);
+    return res.json({ success: true, id });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Statistiques réelles de parrainage d'un utilisateur (parrain / filleuls)
+app.get('/api/users/:id/referrals', async (req, res) => {
+  try {
+    await ensureDbReady();
+    const uid = String(req.params.id || '').trim();
+    if (!uid) return res.status(400).json({ success: false, error: 'userId requis.' });
+    const uRes = await query('SELECT id, referral_code, referred_by, referral_credits FROM users WHERE id = $1 LIMIT 1', [uid]);
+    const userRow = uRes.rows[0] || null;
+    const refCode = userRow && userRow.referral_code ? String(userRow.referral_code).trim().toUpperCase() : '';
+    let referrals = [];
+    if (refCode || uid) {
+      const fRes = await query(
+        `SELECT id, name, email, referred_by, created_at FROM users WHERE (UPPER(referred_by) = UPPER($1) OR referred_by = $2) AND id <> $2 ORDER BY created_at DESC LIMIT 100`,
+        [refCode || '__NONE__', uid]
+      );
+      referrals = fRes.rows || [];
+    }
+    const referralCredits = Math.max(0, Number(userRow && userRow.referral_credits) || 0);
+    return res.json({
+      success: true,
+      referralCode: refCode,
+      referredBy: (userRow && userRow.referred_by) || null,
+      friendsInvited: referrals.length,
+      creditsEarned: referralCredits,
+      cashEarnedUSD: +(referralCredits * 0.25).toFixed(2),
+      referrals: referrals.map((r) => ({ id: r.id, name: r.name, createdAt: r.created_at }))
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Vérification légère d'un code d'invitation / parrainage (?ref=CODE ou /invite/CODE)
+app.get('/api/referral/:code', async (req, res) => {
+  try {
+    await ensureDbReady();
+    const code = String(req.params.code || '').trim().toUpperCase();
+    if (!code) return res.status(400).json({ valid: false });
+    const r = await query('SELECT id, name, referral_code FROM users WHERE UPPER(referral_code) = UPPER($1) LIMIT 1', [code]);
+    if (r.rows.length === 0) {
+      return res.json({ valid: false, code });
+    }
+    return res.json({ valid: true, code: r.rows[0].referral_code, sponsorName: r.rows[0].name || 'Un ami' });
+  } catch (err) {
+    return res.status(500).json({ valid: false, error: err.message });
   }
 });
 
@@ -640,8 +755,16 @@ app.get('/api/songs/user/:userId', async (req, res) => {
     if (!userId || userId === 'null' || userId === 'undefined') {
       return res.json({ songs: [] });
     }
-    const r = await query('SELECT * FROM songs WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
-    return res.json({ songs: r.rows });
+    const r = await query(
+      `SELECT *, COALESCE(NULLIF(cover_url, ''), album_cover) AS resolved_cover FROM songs WHERE user_id = $1 ORDER BY created_at DESC`,
+      [userId]
+    );
+    const songs = (r.rows || []).map((row) => ({
+      ...row,
+      cover_url: row.resolved_cover || row.cover_url || row.album_cover || '',
+      album_cover: row.resolved_cover || row.album_cover || row.cover_url || ''
+    }));
+    return res.json({ songs });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -661,6 +784,7 @@ app.get('/api/explorer', async (_req, res) => {
       style: row.style || '',
       styleKey: row.style_key || 'afrobeat',
       occasion: row.occasion || '',
+      toolCategory: row.tool_category || (row.video_url && !row.audio_url ? 'video' : 'generation'),
       audioUrl: row.audio_url || '',
       videoUrl: row.video_url || '',
       albumCover: row.cover_url || '',
@@ -678,25 +802,25 @@ app.post('/api/explorer', async (req, res) => {
   try {
     await ensureDbReady();
     const p = req.body || {};
-    const userId = String(p.userId || p.user_id || '').trim();
+    const userId = String(p.userId || p.user_id || '').trim() || 'user';
     const title = String(p.title || '').trim();
-    if (!userId || !title) {
-      return res.status(400).json({ success: false, error: 'userId et title requis pour publier sur Explorer.' });
+    if (!title) {
+      return res.status(400).json({ success: false, error: 'title requis pour publier sur Explorer.' });
     }
     const postId = String(p.id || ('exp_' + Date.now() + '_' + crypto.randomBytes(2).toString('hex')));
     const origId = String(p.originalSongId || p.original_song_id || postId);
 
     const existing = await query(
-      `SELECT id FROM explorer_posts WHERE id = $1 OR (original_song_id = $2 AND user_id = $3) LIMIT 1`,
+      `SELECT * FROM explorer_posts WHERE id = $1 OR (original_song_id = $2 AND user_id = $3) LIMIT 1`,
       [postId, origId, userId]
     );
     if (existing.rows.length > 0) {
-      return res.json({ success: true, alreadyPublished: true, id: existing.rows[0].id });
+      return res.json({ success: true, alreadyPublished: true, id: existing.rows[0].id, post: existing.rows[0] });
     }
 
     const r = await query(
-      `INSERT INTO explorer_posts (id, original_song_id, user_id, artist, title, style, style_key, occasion, audio_url, video_url, cover_url, likes, listens)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      `INSERT INTO explorer_posts (id, original_song_id, user_id, artist, title, style, style_key, occasion, tool_category, audio_url, video_url, cover_url, likes, listens)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING *`,
       [
         postId,
@@ -707,6 +831,7 @@ app.post('/api/explorer', async (req, res) => {
         String(p.style || '').slice(0, 100),
         String(p.styleKey || p.style_key || 'afrobeat').slice(0, 80),
         String(p.occasion || '').slice(0, 120),
+        String(p.toolCategory || p.tool_category || (p.videoUrl ? 'video' : 'generation')).slice(0, 60),
         String(p.audioUrl || p.audio_url || ''),
         String(p.videoUrl || p.video_url || ''),
         String(p.albumCover || p.coverUrl || p.cover_url || ''),
@@ -715,6 +840,18 @@ app.post('/api/explorer', async (req, res) => {
       ]
     );
     return res.json({ success: true, post: r.rows[0] });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/explorer/:id', async (req, res) => {
+  try {
+    await ensureDbReady();
+    const id = String(req.params.id || '').trim();
+    if (!id) return res.status(400).json({ success: false });
+    await query('DELETE FROM explorer_posts WHERE id = $1 OR original_song_id = $1', [id]);
+    return res.json({ success: true, id });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

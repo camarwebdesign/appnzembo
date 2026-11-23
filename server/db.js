@@ -51,6 +51,8 @@ async function initDb() {
     );
 
     ALTER TABLE users ALTER COLUMN credits SET DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by VARCHAR(120);
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_credits INT DEFAULT 0;
 
     CREATE TABLE IF NOT EXISTS songs (
       id VARCHAR(120) PRIMARY KEY,
@@ -60,19 +62,36 @@ async function initDb() {
       occasion VARCHAR(100),
       recipient VARCHAR(150),
       lyrics TEXT,
+      prompt TEXT,
       audio_url TEXT,
+      audio_url_2 TEXT,
       video_url TEXT,
+      vocal_url TEXT,
+      instrumental_url TEXT,
       cover_url TEXT,
+      album_cover TEXT,
       task_id VARCHAR(120),
       audio_id VARCHAR(120),
+      audio_id_2 VARCHAR(120),
       tool_category VARCHAR(60) DEFAULT 'generation',
       status VARCHAR(50) DEFAULT 'processing',
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
     ALTER TABLE songs ADD COLUMN IF NOT EXISTS audio_id VARCHAR(120);
+    ALTER TABLE songs ADD COLUMN IF NOT EXISTS audio_id_2 VARCHAR(120);
     ALTER TABLE songs ADD COLUMN IF NOT EXISTS tool_category VARCHAR(60) DEFAULT 'generation';
     ALTER TABLE songs ADD COLUMN IF NOT EXISTS video_url TEXT;
+    ALTER TABLE songs ADD COLUMN IF NOT EXISTS cover_url TEXT;
+    ALTER TABLE songs ADD COLUMN IF NOT EXISTS album_cover TEXT;
+    ALTER TABLE songs ADD COLUMN IF NOT EXISTS audio_url_2 TEXT;
+    ALTER TABLE songs ADD COLUMN IF NOT EXISTS vocal_url TEXT;
+    ALTER TABLE songs ADD COLUMN IF NOT EXISTS instrumental_url TEXT;
+    ALTER TABLE songs ADD COLUMN IF NOT EXISTS prompt TEXT;
+    ALTER TABLE songs ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+    ALTER TABLE songs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
     CREATE TABLE IF NOT EXISTS transactions (
       id VARCHAR(120) PRIMARY KEY,
@@ -219,6 +238,7 @@ async function initDb() {
       style VARCHAR(100) DEFAULT '',
       style_key VARCHAR(80) DEFAULT 'afrobeat',
       occasion VARCHAR(120) DEFAULT '',
+      tool_category VARCHAR(60) DEFAULT 'generation',
       audio_url TEXT DEFAULT '',
       video_url TEXT DEFAULT '',
       cover_url TEXT DEFAULT '',
@@ -226,6 +246,10 @@ async function initDb() {
       listens INT DEFAULT 1,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+
+    ALTER TABLE explorer_posts ADD COLUMN IF NOT EXISTS tool_category VARCHAR(60) DEFAULT 'generation';
+    ALTER TABLE explorer_posts ADD COLUMN IF NOT EXISTS video_url TEXT DEFAULT '';
+    ALTER TABLE explorer_posts ADD COLUMN IF NOT EXISTS cover_url TEXT DEFAULT '';
 
     CREATE INDEX IF NOT EXISTS idx_payment_tx_session ON payment_transactions (checkout_session_id);
     CREATE INDEX IF NOT EXISTS idx_payment_tx_payment ON payment_transactions (saspay_payment_id);

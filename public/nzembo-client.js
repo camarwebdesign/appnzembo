@@ -598,28 +598,120 @@
     } catch (e) {}
   }
 
+  const PENDING_REFERRAL_KEY = 'nzembo_pending_referral_code';
+
+  function normalizeReferralCode(raw) {
+    const clean = String(raw || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    if (clean.length < 3 || clean.length > 40) return '';
+    return clean;
+  }
+
+  function getPendingReferralCode() {
+    let found = '';
+    try {
+      if (typeof window !== 'undefined' && window._capturedReferralCode) {
+        found = normalizeReferralCode(window._capturedReferralCode);
+      }
+      if (!found && typeof sessionStorage !== 'undefined') {
+        found = normalizeReferralCode(sessionStorage.getItem(PENDING_REFERRAL_KEY));
+      }
+      if (!found && typeof localStorage !== 'undefined') {
+        found = normalizeReferralCode(localStorage.getItem(PENDING_REFERRAL_KEY));
+      }
+    } catch {}
+    return found;
+  }
+
+  function savePendingReferralCode(code) {
+    const clean = normalizeReferralCode(code);
+    if (!clean) return '';
+    try {
+      if (typeof window !== 'undefined') window._capturedReferralCode = clean;
+      if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(PENDING_REFERRAL_KEY, clean);
+      if (typeof localStorage !== 'undefined') localStorage.setItem(PENDING_REFERRAL_KEY, clean);
+    } catch {}
+    return clean;
+  }
+
+  function clearPendingReferralCode() {
+    try {
+      if (typeof window !== 'undefined') delete window._capturedReferralCode;
+      if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(PENDING_REFERRAL_KEY);
+      if (typeof localStorage !== 'undefined') localStorage.removeItem(PENDING_REFERRAL_KEY);
+    } catch {}
+  }
+
+  function captureReferralCodeFromUrl() {
+    try {
+      if (typeof window === 'undefined' || !window.location) return '';
+      const params = new URLSearchParams(window.location.search || '');
+      let candidate = params.get('ref') || params.get('referral') || params.get('invite') || params.get('code') || '';
+      if (!candidate && window.location.pathname) {
+        const invMatch = window.location.pathname.match(/\/invite\/([^/?#]+)/i);
+        if (invMatch && invMatch[1]) {
+          candidate = decodeURIComponent(invMatch[1]);
+        }
+      }
+      if (!candidate && window.location.hash && window.location.hash.includes('ref=')) {
+        const hParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+        candidate = hParams.get('ref') || '';
+      }
+      const clean = normalizeReferralCode(candidate);
+      if (clean) {
+        return savePendingReferralCode(clean);
+      }
+    } catch {}
+    return getPendingReferralCode();
+  }
+
+  try { captureReferralCodeFromUrl(); } catch {}
+
+  async function resolveActiveUserId(explicitUserId = '', sb = null) {
+    if (explicitUserId && typeof explicitUserId === 'string' && explicitUserId.trim()) {
+      return explicitUserId.trim();
+    }
+    const localU = getCurrentUser();
+    if (localU && localU.id) return String(localU.id).trim();
+    try {
+      const client = sb || getSupabase();
+      if (client && client.auth) {
+        const { data } = await client.auth.getUser();
+        if (data && data.user && data.user.id) return String(data.user.id).trim();
+      }
+    } catch {}
+    return '';
+  }
+
   async function syncSongToNeon(creation) {
     try {
       if (!creation) return;
       const u = getCurrentUser();
+      const uid = String((u && u.id) || creation.userId || creation.user_id || '').trim();
       await fetch(`${getBackendApiBase()}/api/songs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: creation.id || creation.taskId,
-          userId: (u && u.id) || creation.userId || '',
+          userId: uid,
           title: creation.title,
           style: creation.style,
           occasion: creation.occasion,
           recipient: creation.recipient,
           lyrics: creation.lyrics,
+          prompt: creation.prompt,
           audioUrl: creation.audioUrl,
+          audioUrl2: creation.audioUrl2,
           videoUrl: creation.videoUrl,
+          vocalUrl: creation.vocalUrl,
+          instrumentalUrl: creation.instrumentalUrl,
           coverUrl: creation.coverUrl || creation.albumCover,
+          albumCover: creation.albumCover || creation.coverUrl,
           taskId: creation.taskId,
           audioId: creation.audioId,
+          audioId2: creation.audioId2,
           toolCategory: creation.toolCategory || 'generation',
-          status: creation.status || (creation.isProcessing ? 'processing' : 'completed')
+          status: creation.status || (creation.isProcessing ? 'processing' : 'completed'),
+          metadata: creation.metadata || {}
         })
       }).catch(() => {});
     } catch {}
@@ -627,11 +719,12 @@
 
   async function saveCreation(creation) {
     if (!creation) return null;
-    syncSongToNeon(creation);
     const sb = getSupabase();
-    if (!sb) return creation;
+    const resolvedUid = await resolveActiveUserId(creation.userId || creation.user_id || '', sb);
+    const enrichedCreation = resolvedUid ? { ...creation, userId: resolvedUid } : creation;
+    syncSongToNeon(enrichedCreation);
+    if (!sb) return enrichedCreation;
 
-    const user = getCurrentUser();
     const creationId = String(creation.id || creation.taskId || ('nz_' + Date.now()));
     const isProcessing = (creation.isProcessing !== undefined)
       ? Boolean(creation.isProcessing)
@@ -640,7 +733,7 @@
 
     const payload = {
       id: creationId,
-      user_id: (user && user.id && String(user.id).includes('-')) ? user.id : null,
+      user_id: (resolvedUid && resolvedUid.includes('-')) ? resolvedUid : null,
       task_id: creation.taskId || creationId,
       audio_id: creation.audioId || null,
       audio_id_2: creation.audioId2 || null,
@@ -663,7 +756,12 @@
       visualizer_style_label: creation.visualizerStyleLabel || null,
       status: statusVal,
       is_processing: isProcessing,
-      metadata: creation.metadata || {}
+      metadata: {
+        ...(creation.metadata && typeof creation.metadata === 'object' ? creation.metadata : {}),
+        ...(creation.sourceTaskId ? { sourceTaskId: creation.sourceTaskId } : {}),
+        ...(creation.sourceAudioId ? { sourceAudioId: creation.sourceAudioId } : {}),
+        ...(creation.isPublic ? { isPublic: true } : {})
+      }
     };
 
     try {
@@ -676,11 +774,13 @@
 
   async function updateCreation(creationId, updates) {
     if (!creationId || !updates) return null;
-    syncSongToNeon({ id: creationId, taskId: updates.taskId || creationId, ...updates });
     const sb = getSupabase();
+    const resolvedUid = await resolveActiveUserId(updates.userId || '', sb);
+    syncSongToNeon({ id: creationId, taskId: updates.taskId || creationId, userId: resolvedUid, ...updates });
     if (!sb) return null;
 
     const mapped = {};
+    if (resolvedUid && resolvedUid.includes('-')) mapped.user_id = resolvedUid;
     if (updates.status !== undefined) mapped.status = updates.status;
     if (updates.isProcessing !== undefined) mapped.is_processing = Boolean(updates.isProcessing);
     if (updates.audioUrl !== undefined) mapped.audio_url = updates.audioUrl;
@@ -693,6 +793,7 @@
     if (updates.lyrics !== undefined) mapped.lyrics = updates.lyrics;
     if (updates.title !== undefined) mapped.title = updates.title;
     if (updates.artist !== undefined) mapped.artist = updates.artist;
+    if (updates.style !== undefined) mapped.style = updates.style;
     if (updates.audioId !== undefined) mapped.audio_id = updates.audioId;
     if (updates.audioId2 !== undefined) mapped.audio_id_2 = updates.audioId2;
     if (updates.taskId !== undefined) mapped.task_id = updates.taskId;
@@ -711,42 +812,62 @@
   async function getUserCreations(userId) {
     const sb = getSupabase();
     try {
-      const activeUser = getCurrentUser();
-      const effectiveUserId = (userId && typeof userId === 'string' && userId.trim())
-        ? userId.trim()
-        : (activeUser && activeUser.id ? String(activeUser.id).trim() : null);
+      const effectiveUserId = await resolveActiveUserId(userId, sb);
 
-      // Isolation stricte par utilisateur : sans session vérifiée, retourner une liste vide
+      // Isolation stricte par utilisateur : sans utilisateur identifié, retourner une liste vide
       if (!effectiveUserId || !isUserOtpVerified(effectiveUserId)) {
         return [];
       }
 
       let rows = [];
+      let sbOk = false;
+      let neonOk = false;
+
       if (sb && effectiveUserId.includes('-')) {
-        const { data, error } = await sb.from('creations').select('*')
-          .eq('user_id', effectiveUserId)
-          .order('created_at', { ascending: false });
-        if (!error && Array.isArray(data)) {
-          rows = data.filter(r => r && String(r.user_id) === String(effectiveUserId));
-        }
+        try {
+          const { data, error } = await sb.from('creations').select('*')
+            .eq('user_id', effectiveUserId)
+            .order('created_at', { ascending: false });
+          if (!error && Array.isArray(data)) {
+            sbOk = true;
+            rows = data.filter(r => r && String(r.user_id) === String(effectiveUserId));
+          }
+        } catch {}
       }
 
-      // Compléter avec les créations de cet utilisateur exact enregistrées sur PostgreSQL Neon
+      // Compléter / fusionner avec les créations de cet utilisateur exact enregistrées sur PostgreSQL Neon
       try {
         const neonRes = await fetch(`${getBackendApiBase()}/api/songs/user/${encodeURIComponent(effectiveUserId)}`);
         const neonJson = await neonRes.json().catch(() => ({}));
-        if (neonRes.ok && Array.isArray(neonJson.songs) && neonJson.songs.length > 0) {
-          const seenIds = new Set(rows.map(r => String(r.id || r.task_id)));
+        if (neonRes.ok && Array.isArray(neonJson.songs)) {
+          neonOk = true;
+          const byId = new Map();
+          rows.forEach(r => {
+            if (!r) return;
+            if (r.id) byId.set(String(r.id), r);
+            if (r.task_id) byId.set(String(r.task_id), r);
+          });
           for (const ns of neonJson.songs) {
             if (!ns || String(ns.user_id) !== String(effectiveUserId)) continue;
-            const key = String(ns.id || ns.task_id);
-            if (!seenIds.has(key)) {
-              seenIds.add(key);
-              rows.push({
+            const nsMeta = (ns.metadata && typeof ns.metadata === 'object') ? ns.metadata : {};
+            const existing = byId.get(String(ns.id)) || (ns.task_id ? byId.get(String(ns.task_id)) : null);
+            const resolvedNeonCover = ns.cover_url || ns.album_cover || '';
+            if (existing) {
+              if (!existing.audio_url && ns.audio_url) existing.audio_url = ns.audio_url;
+              if (!existing.audio_url_2 && ns.audio_url_2) existing.audio_url_2 = ns.audio_url_2;
+              if (!existing.video_url && ns.video_url) existing.video_url = ns.video_url;
+              if (!existing.vocal_url && ns.vocal_url) existing.vocal_url = ns.vocal_url;
+              if (!existing.instrumental_url && ns.instrumental_url) existing.instrumental_url = ns.instrumental_url;
+              if (!existing.cover_url && resolvedNeonCover) existing.cover_url = resolvedNeonCover;
+              if (!existing.album_cover && resolvedNeonCover) existing.album_cover = resolvedNeonCover;
+              if (!existing.lyrics && ns.lyrics) existing.lyrics = ns.lyrics;
+            } else {
+              const rowObj = {
                 id: ns.id,
                 user_id: ns.user_id,
                 task_id: ns.task_id || ns.id,
                 audio_id: ns.audio_id || ns.id,
+                audio_id_2: ns.audio_id_2 || '',
                 title: ns.title || 'Chanson Nzembo',
                 artist: 'Nzembo',
                 style: ns.style || '',
@@ -754,20 +875,30 @@
                 recipient: ns.recipient || '',
                 occasion: ns.occasion || '',
                 lyrics: ns.lyrics || '',
+                prompt: ns.prompt || '',
                 audio_url: ns.audio_url || '',
+                audio_url_2: ns.audio_url_2 || '',
                 video_url: ns.video_url || '',
-                cover_url: ns.cover_url || '',
-                album_cover: ns.cover_url || '',
+                vocal_url: ns.vocal_url || '',
+                instrumental_url: ns.instrumental_url || '',
+                cover_url: resolvedNeonCover,
+                album_cover: resolvedNeonCover,
+                metadata: nsMeta,
                 status: ns.status === 'completed' ? 'termine' : (ns.status === 'processing' ? 'en_cours' : ns.status),
                 is_processing: ns.status === 'processing',
                 created_at: ns.created_at
-              });
+              };
+              rows.push(rowObj);
+              if (rowObj.id) byId.set(String(rowObj.id), rowObj);
+              if (rowObj.task_id) byId.set(String(rowObj.task_id), rowObj);
             }
           }
         }
       } catch {}
 
-      return rows.map(row => {
+      rows.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+      const mapped = rows.map(row => {
         const meta = (row.metadata && typeof row.metadata === 'object') ? row.metadata : {};
         const resolvedVideoUrl = row.video_url || meta.videoUrl || meta.video_url || '';
         const resolvedAudioUrl = row.audio_url || meta.audioUrl || meta.audio_url || '';
@@ -799,25 +930,36 @@
           visualizerStyle: row.visualizer_style || meta.visualizerStyle || '',
           visualizerStyleLabel: row.visualizer_style_label || meta.visualizerStyleLabel || '',
           metadata: meta,
+          isPublic: Boolean(meta.isPublic || meta.publishedToExplorer),
           lyricsVtt: meta.lyricsVtt || '',
           sourceTaskId: meta.sourceTaskId || '',
           sourceAudioId: meta.sourceAudioId || '',
-          hasFailed: row.status === 'echoue',
+          hasFailed: row.status === 'echoue' || row.status === 'failed',
           status: row.status || (row.is_processing ? 'en_cours' : 'termine'),
-          isProcessing: Boolean(row.is_processing || row.status === 'en_cours' || row.status === 'IN_PROGRESS'),
+          isProcessing: Boolean(row.is_processing || row.status === 'en_cours' || row.status === 'IN_PROGRESS' || row.status === 'processing'),
           date: row.created_at ? new Date(row.created_at).toLocaleDateString('fr-FR') : 'Récemment',
           createdAt: row.created_at
         };
       });
+
+      if (!sbOk && !neonOk) {
+        try { Object.defineProperty(mapped, '_fetchError', { value: true, enumerable: false }); } catch {}
+      }
+      return mapped;
     } catch (e) {
-      return [];
+      const errArr = [];
+      try { Object.defineProperty(errArr, '_fetchError', { value: true, enumerable: false }); } catch {}
+      return errArr;
     }
   }
 
   async function deleteCreation(creationId) {
     if (!creationId) return false;
+    try {
+      await fetch(`${getBackendApiBase()}/api/songs/${encodeURIComponent(creationId)}`, { method: 'DELETE' }).catch(() => {});
+    } catch {}
     const sb = getSupabase();
-    if (!sb) return false;
+    if (!sb) return true;
     try {
       const { error } = await sb.from('creations').delete().or(`id.eq.${creationId},task_id.eq.${creationId}`);
       return !error;
@@ -840,6 +982,48 @@
     buildLyricsVtt: buildLyricsVtt,
     getPendingOtp: getPendingOtp,
     clearPendingOtp: clearPendingOtp,
+    getPendingReferralCode: getPendingReferralCode,
+    savePendingReferralCode: savePendingReferralCode,
+    clearPendingReferralCode: clearPendingReferralCode,
+    captureReferralCodeFromUrl: captureReferralCodeFromUrl,
+
+    getReferralStats: async function(userId = '') {
+      try {
+        const cur = getCurrentUser();
+        const uid = String(userId || (cur && cur.id) || '').trim();
+        if (!uid) return null;
+        const res = await fetch(`${getBackendApiBase()}/api/users/${encodeURIComponent(uid)}/referrals`);
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.success) {
+          if (typeof window !== 'undefined' && window.NzemboStore && typeof window.NzemboStore.get === 'function' && typeof window.NzemboStore.save === 'function') {
+            try {
+              const store = window.NzemboStore.get();
+              store.userAccount = store.userAccount || {};
+              store.userAccount.referralStats = {
+                ...(store.userAccount.referralStats || {}),
+                friendsInvited: Math.max(0, Number(json.friendsInvited) || 0),
+                creditsEarned: Math.max(0, Number(json.creditsEarned) || 0),
+                cashEarnedUSD: Number(json.cashEarnedUSD) || 0
+              };
+              window.NzemboStore.save(store);
+            } catch {}
+          }
+          return json;
+        }
+      } catch {}
+      return null;
+    },
+
+    validateReferralCode: async function(code) {
+      const clean = normalizeReferralCode(code);
+      if (!clean) return { valid: false };
+      try {
+        const res = await fetch(`${getBackendApiBase()}/api/referral/${encodeURIComponent(clean)}`);
+        return await res.json().catch(() => ({ valid: false }));
+      } catch {
+        return { valid: false };
+      }
+    },
 
     checkEngineHealth: async function() {
       try {
@@ -878,6 +1062,22 @@
         });
         const json = await res.json().catch(() => ({}));
         if (res.ok && json.success && json.user) {
+          if (json.referralStats && typeof window !== 'undefined' && window.NzemboStore && typeof window.NzemboStore.get === 'function' && typeof window.NzemboStore.save === 'function') {
+            try {
+              const store = window.NzemboStore.get();
+              store.userAccount = store.userAccount || {};
+              store.userAccount.referralStats = {
+                ...(store.userAccount.referralStats || {}),
+                friendsInvited: Math.max(0, Number(json.referralStats.friendsInvited) || 0),
+                creditsEarned: Math.max(0, Number(json.referralStats.creditsEarned) || 0),
+                cashEarnedUSD: Number(json.referralStats.cashEarnedUSD) || 0
+              };
+              if (json.user.referral_code) {
+                store.userAccount.referralLink = `https://nzembo.net/invite/${json.user.referral_code}`;
+              }
+              window.NzemboStore.save(store);
+            } catch {}
+          }
           return Number(json.credits ?? json.user.credits ?? 0);
         }
       } catch (e) {}
@@ -1026,24 +1226,105 @@
 
     // ================= EXPLORER PUBLIC & PARTAGÉ =================
     getExplorerPosts: async function() {
+      const merged = [];
+      const seen = new Set();
       try {
         const res = await fetch(`${getBackendApiBase()}/api/explorer`);
         const json = await res.json().catch(() => ({}));
         if (res.ok && json.success && Array.isArray(json.posts)) {
-          return json.posts;
+          for (const p of json.posts) {
+            if (!p) continue;
+            const k = String(p.originalSongId || p.id || '');
+            if (k && !seen.has(k)) {
+              seen.add(k);
+              merged.push(p);
+            }
+          }
         }
       } catch {}
-      return null;
+
+      try {
+        const sb = getSupabase();
+        if (sb) {
+          const { data: pubRows, error } = await sb
+            .from('creations')
+            .select('*')
+            .contains('metadata', { isPublic: true })
+            .order('created_at', { ascending: false })
+            .limit(80);
+          if (!error && Array.isArray(pubRows)) {
+            for (const row of pubRows) {
+              if (!row) continue;
+              const meta = (row.metadata && typeof row.metadata === 'object') ? row.metadata : {};
+              const mediaAud = row.audio_url || meta.audioUrl || '';
+              const mediaVid = row.video_url || meta.videoUrl || '';
+              if (!mediaAud && !mediaVid) continue;
+              const origKey = String(row.id || row.task_id || '');
+              if (origKey && seen.has(origKey)) continue;
+              seen.add(origKey);
+              merged.push({
+                id: meta.explorerPostId || ('exp_' + origKey),
+                originalSongId: origKey,
+                userId: row.user_id || '',
+                artist: row.artist || 'Artiste Nzembo',
+                title: row.title || 'Création Nzembo',
+                style: row.style || '',
+                styleKey: meta.styleKey || 'afrobeat',
+                occasion: row.occasion || '',
+                toolCategory: row.tool_category || (mediaVid && !mediaAud ? 'video' : 'generation'),
+                audioUrl: mediaAud,
+                videoUrl: mediaVid,
+                albumCover: row.album_cover || row.cover_url || meta.coverUrl || '',
+                likes: Math.max(0, Number(meta.likes) || 0),
+                listens: Math.max(1, Number(meta.listens) || 1),
+                createdAt: row.created_at
+              });
+            }
+          }
+        }
+      } catch {}
+
+      return merged;
     },
 
     publishExplorerPost: async function(post) {
       if (!post) return null;
+      const curUser = getCurrentUser();
+      const uid = String((post.userId && post.userId !== 'user') ? post.userId : (curUser && curUser.id ? curUser.id : 'user'));
+      const payload = {
+        ...post,
+        userId: uid,
+        artist: (post.artist && post.artist !== 'Artiste Nzembo') ? post.artist : ((curUser && curUser.name) || post.artist || 'Artiste Nzembo')
+      };
+      let json = null;
       try {
         const res = await fetch(`${getBackendApiBase()}/api/explorer`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(post)
+          body: JSON.stringify(payload)
         });
+        json = await res.json().catch(() => ({}));
+      } catch {}
+
+      try {
+        const sb = getSupabase();
+        const origId = String(payload.originalSongId || payload.id || '').trim();
+        if (sb && origId && !origId.startsWith('exp_') && !origId.startsWith('comm_')) {
+          const { data: curRow } = await sb.from('creations').select('metadata').or(`id.eq.${origId},task_id.eq.${origId}`).maybeSingle();
+          const curMeta = (curRow && curRow.metadata && typeof curRow.metadata === 'object') ? curRow.metadata : {};
+          await sb.from('creations').update({
+            metadata: { ...curMeta, isPublic: true, explorerPostId: (json && json.post && json.post.id) || payload.id }
+          }).or(`id.eq.${origId},task_id.eq.${origId}`);
+        }
+      } catch {}
+
+      return json;
+    },
+
+    deleteExplorerPost: async function(postId) {
+      if (!postId) return null;
+      try {
+        const res = await fetch(`${getBackendApiBase()}/api/explorer/${encodeURIComponent(postId)}`, { method: 'DELETE' });
         return await res.json().catch(() => ({}));
       } catch {
         return null;
@@ -1082,94 +1363,11 @@
     setUserOtpVerified: setUserOtpVerified,
 
     signInWithGoogle: async function() {
-      const sb = getSupabaseOrThrow();
-      clearPendingOtp();
-      const redirectUrl = buildAuthRedirectUrl('/');
-      let data, error;
-      try {
-        ({ data, error } = await sb.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: redirectUrl
-          }
-        }));
-      } catch (netErr) {
-        throw new Error(formatAuthError(netErr, 'Erreur réseau lors de la connexion Google.'));
-      }
-      if (error) {
-        throw new Error(formatAuthError(error, 'Impossible de démarrer la connexion Google.'));
-      }
-      if (data && data.url && typeof window !== 'undefined' && window.location) {
-        window.location.assign(data.url);
-      }
-      return data;
+      throw new Error('La connexion via Google est momentanément désactivée. Utilise ton adresse e-mail et ton mot de passe.');
     },
 
-    startGoogleEmailOtpAuth: async function(googleEmail, googleName = '') {
-      const cleanEmail = String(googleEmail || '').trim().toLowerCase();
-      if (!cleanEmail || !cleanEmail.includes('@')) {
-        throw new Error('Renseigne ton adresse e-mail Google valide (ex: prenom@gmail.com).');
-      }
-      const resolvedName = String(googleName || cleanEmail.split('@')[0]).trim();
-      setUserOtpVerified(null);
-      setCurrentUser(null);
-
-      // 1. Si un expéditeur serveur Resend est configuré, tenter l'envoi serveur
-      let otpMode = 'supabase_otp';
-      let otpType = 'email';
-      let rateLimited = false;
-
-      try {
-        const srvRes = await fetch(`${getBackendApiBase()}/api/auth/otp/send`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: cleanEmail, purpose: 'google', userName: resolvedName })
-        });
-        const srvJson = await srvRes.json().catch(() => ({}));
-        if (srvRes.ok && srvJson.success && srvJson.sent && !srvJson.useSupabaseOtp) {
-          otpMode = 'server_otp';
-          otpType = 'google';
-        }
-      } catch {}
-
-      if (otpMode === 'supabase_otp') {
-        const sb = getSupabaseOrThrow();
-        const generatedRefCode = 'NZ-' + Math.floor(10000 + Math.random() * 90000);
-        const { error } = await sb.auth.signInWithOtp({
-          email: cleanEmail,
-          options: {
-            shouldCreateUser: true,
-            data: {
-              name: resolvedName,
-              full_name: resolvedName,
-              auth_provider: 'google',
-              referral_code: generatedRefCode
-            }
-          }
-        });
-        if (error) {
-          if (/security purposes|rate limit|too many requests/i.test(error.message)) {
-            rateLimited = true;
-          } else {
-            throw new Error(formatAuthError(error, "Impossible d'envoyer le code de validation à ton compte Google."));
-          }
-        }
-      }
-
-      const pendingPayload = {
-        email: cleanEmail,
-        name: resolvedName,
-        mode: 'google',
-        purpose: 'google',
-        otpMode,
-        otpType,
-        rateLimited
-      };
-      setPendingOtp(pendingPayload);
-      return {
-        needsOtpVerification: true,
-        ...pendingPayload
-      };
+    startGoogleEmailOtpAuth: async function() {
+      throw new Error('La connexion via Google est momentanément désactivée. Utilise ton adresse e-mail et ton mot de passe.');
     },
 
     sendEmailOtp: async function(email, purpose = 'auth', userName = '', shouldCreateUser = false) {
@@ -1391,6 +1589,7 @@
       name = (name || '').trim();
       email = (email || '').trim().toLowerCase();
       password = (password || '').trim();
+      const resolvedRefInput = normalizeReferralCode(referralCodeUsed || getPendingReferralCode());
 
       if (!name) throw new Error('Renseigne ton nom complet.');
       if (!email || !email.includes('@')) throw new Error('Renseigne une adresse e-mail valide.');
@@ -1402,6 +1601,7 @@
 
       const sb = getSupabaseOrThrow();
       const generatedRefCode = 'NZ-' + Math.floor(10000 + Math.random() * 90000);
+      const cleanRefUsed = (resolvedRefInput && resolvedRefInput !== generatedRefCode) ? resolvedRefInput : '';
       const redirectUrl = buildAuthRedirectUrl('/');
 
       let data, error;
@@ -1415,7 +1615,7 @@
               name,
               full_name: name,
               referral_code: generatedRefCode,
-              referral_code_used: referralCodeUsed || null
+              referral_code_used: cleanRefUsed || null
             }
           }
         }));
@@ -1455,19 +1655,24 @@
       let profile = null;
       try {
         if (!isAlreadyRegistered) {
-          const { data: ups } = await sb.from('profiles').upsert([{
+          const { data: ups, error: upsErr } = await sb.from('profiles').upsert([{
             id: authUser.id,
             email: authUser.email || email,
             name: name,
             credits: 0,
             referral_code: generatedRefCode
           }], { onConflict: 'id' }).select().maybeSingle();
-          profile = ups;
+          if (!upsErr && ups) profile = ups;
         } else {
           const { data: existingProf } = await sb.from('profiles').select('*').eq('id', authUser.id).maybeSingle();
           profile = existingProf;
         }
       } catch {}
+
+      const finalOwnRefCode = (profile && profile.referral_code) || generatedRefCode;
+      const effectiveRefUsed = (cleanRefUsed && cleanRefUsed !== finalOwnRefCode.toUpperCase())
+        ? cleanRefUsed
+        : (authUser.user_metadata?.referral_code_used || null);
 
       const userObj = {
         id: authUser.id,
@@ -1475,8 +1680,8 @@
         name: (profile && profile.name) || name,
         credits: isAlreadyRegistered && profile && profile.credits !== undefined ? Math.max(0, Number(profile.credits)) : 0,
         avatar_url: (profile && profile.avatar_url) || null,
-        referral_code: (profile && profile.referral_code) || generatedRefCode,
-        referral_code_used: referralCodeUsed || null,
+        referral_code: finalOwnRefCode,
+        referral_code_used: effectiveRefUsed,
         needsConfirmation: false,
         needsOtpVerification: false
       };
@@ -1491,6 +1696,7 @@
         savePersistedCredits(syncedCredits, userObj.id);
       }
 
+      clearPendingReferralCode();
       setCurrentUser(userObj);
       return userObj;
     },
