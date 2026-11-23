@@ -14,28 +14,118 @@ if (typeof tls.getCACertificates === 'function' && typeof tls.setDefaultCACertif
 
 const CREDIT_PRICE_USD = 0.80;
 
-const CURRENCY_RATES = {
-  USD: 1,
-  CDF: 2850,
-  EUR: 0.92,
-  XAF: 615,
-  XOF: 615,
-  NGN: 1550,
-  KES: 130,
-  GHS: 15.5,
-  RWF: 1350,
+const SUPPORTED_CURRENCIES = {
+  USD: { name: 'Dollar américain', country: 'US', symbol: '$', decimals: 2 },
+  CDF: { name: 'Franc Congolais (RDC)', country: 'CD', symbol: 'CDF', decimals: 0 },
+  EUR: { name: 'Euro (Zone Euro)', country: 'FR', symbol: '€', decimals: 2 },
+  GBP: { name: 'Livre Sterling (UK)', country: 'GB', symbol: '£', decimals: 2 },
+  AED: { name: 'Dirham des Émirats (SasPay)', country: 'AE', symbol: 'AED', decimals: 2 },
+  SAR: { name: 'Riyal saoudien (SasPay)', country: 'SA', symbol: 'SAR', decimals: 2 },
+  BHD: { name: 'Dinar bahreïni (SasPay)', country: 'BH', symbol: 'BHD', decimals: 3 },
+  OMR: { name: 'Rial omanais (SasPay)', country: 'OM', symbol: 'OMR', decimals: 3 },
+  KWD: { name: 'Dinar koweïtien (SasPay)', country: 'KW', symbol: 'KWD', decimals: 3 },
+  JOD: { name: 'Dinar jordanien (SasPay)', country: 'JO', symbol: 'JOD', decimals: 3 },
+  IQD: { name: 'Dinar irakien (SasPay)', country: 'IQ', symbol: 'IQD', decimals: 0 },
+  EGP: { name: 'Livre égyptienne (SasPay)', country: 'EG', symbol: 'EGP', decimals: 2 },
+  ILS: { name: 'Shekel israélien (SasPay)', country: 'IL', symbol: '₪', decimals: 2 },
+  QAR: { name: 'Riyal qatari (SasPay)', country: 'QA', symbol: 'QAR', decimals: 2 },
+  XAF: { name: 'Franc CFA (CEMAC)', country: 'CM', symbol: 'FCFA', decimals: 0 },
+  XOF: { name: 'Franc CFA (UEMOA)', country: 'CI', symbol: 'FCFA', decimals: 0 },
+  KES: { name: 'Shilling kényan (Kenya)', country: 'KE', symbol: 'KES', decimals: 0 },
+  NGN: { name: 'Naira nigérian (Nigeria)', country: 'NG', symbol: '₦', decimals: 0 },
+  ZAR: { name: 'Rand sud-africain (Afrique du Sud)', country: 'ZA', symbol: 'R', decimals: 2 },
+  GHS: { name: 'Cedi ghanéen (Ghana)', country: 'GH', symbol: 'GH₵', decimals: 2 },
+  RWF: { name: 'Franc rwandais (Rwanda)', country: 'RW', symbol: 'RWF', decimals: 0 },
+  UGX: { name: 'Shilling ougandais (Ouganda)', country: 'UG', symbol: 'UGX', decimals: 0 },
+  TZS: { name: 'Shilling tanzanien (Tanzanie)', country: 'TZ', symbol: 'TZS', decimals: 0 },
+  ZMW: { name: 'Kwacha zambien (Zambie)', country: 'ZM', symbol: 'ZMW', decimals: 2 },
+  MAD: { name: 'Dirham marocain (Maroc)', country: 'MA', symbol: 'MAD', decimals: 2 },
+  TND: { name: 'Dinar tunisien (Tunisie)', country: 'TN', symbol: 'TND', decimals: 3 },
+  DZD: { name: 'Dinar algérien (Algérie)', country: 'DZ', symbol: 'DZD', decimals: 2 },
+  CAD: { name: 'Dollar canadien (Canada)', country: 'CA', symbol: 'CAD $', decimals: 2 },
+  CHF: { name: 'Franc suisse (Suisse)', country: 'CH', symbol: 'CHF', decimals: 2 },
+  AUD: { name: 'Dollar australien (Australie)', country: 'AU', symbol: 'A$', decimals: 2 },
+  TRY: { name: 'Livre turque (Turquie)', country: 'TR', symbol: '₺', decimals: 2 },
+  INR: { name: 'Roupie indienne (Inde)', country: 'IN', symbol: '₹', decimals: 2 },
+  PKR: { name: 'Roupie pakistanaise (Pakistan)', country: 'PK', symbol: 'PKR', decimals: 0 },
 };
 
-const CURRENCY_COUNTRY_MAP = {
-  CDF: 'CD',
-  XOF: 'CI',
-  XAF: 'CM',
-  EUR: 'FR',
-  NGN: 'NG',
-  KES: 'KE',
-  GHS: 'GH',
-  RWF: 'RW',
+// Secours hors-ligne utilisé UNIQUEMENT si les APIs de taux de change en direct sont injoignables
+const EMERGENCY_FALLBACK_RATES = {
+  USD: 1, CDF: 2315, EUR: 0.91, GBP: 0.76, AED: 3.6725, SAR: 3.75,
+  BHD: 0.376, OMR: 0.3845, KWD: 0.31, JOD: 0.709, IQD: 1515, EGP: 54.17,
+  ILS: 3.35, QAR: 3.64, XAF: 598, XOF: 598, KES: 129, NGN: 1550,
+  ZAR: 18.1, GHS: 15.5, RWF: 1380, UGX: 3700, TZS: 2650, ZMW: 27,
+  MAD: 9.9, TND: 3.1, DZD: 134, CAD: 1.43, CHF: 0.84, AUD: 1.54,
+  TRY: 36, INR: 86, PKR: 279,
 };
+
+let _fxCache = {
+  rates: { ...EMERGENCY_FALLBACK_RATES },
+  source: 'fallback',
+  updatedAt: null,
+  fetchedAtMs: 0,
+};
+
+async function getLiveCurrencyRates(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && _fxCache.source !== 'fallback' && (now - _fxCache.fetchedAtMs) < 10 * 60 * 1000) {
+    return { ..._fxCache, source: 'cache' };
+  }
+
+  const providers = [
+    { url: 'https://open.er-api.com/v6/latest/USD', extract: (d) => d && d.rates },
+    { url: 'https://api.exchangerate-api.com/v4/latest/USD', extract: (d) => d && d.rates },
+  ];
+
+  for (const prov of providers) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(prov.url, { signal: controller.signal });
+      clearTimeout(timer);
+      if (!res.ok) continue;
+      const json = await res.json().catch(() => null);
+      const liveRates = prov.extract(json);
+      if (liveRates && typeof liveRates === 'object' && Number(liveRates.EUR) > 0) {
+        const merged = { USD: 1 };
+        for (const code of Object.keys(SUPPORTED_CURRENCIES)) {
+          const val = Number(liveRates[code]);
+          if (Number.isFinite(val) && val > 0) {
+            merged[code] = val;
+          } else {
+            merged[code] = EMERGENCY_FALLBACK_RATES[code] || 1;
+          }
+        }
+        _fxCache = {
+          rates: merged,
+          source: 'live',
+          updatedAt: json.time_last_update_utc || new Date().toISOString(),
+          fetchedAtMs: now,
+        };
+        return _fxCache;
+      }
+    } catch {}
+  }
+
+  return _fxCache;
+}
+
+function formatConvertedAmount(usdAmount, currCode, ratesMap) {
+  const curr = SUPPORTED_CURRENCIES[currCode] ? currCode : 'USD';
+  const rate = Number((ratesMap && ratesMap[curr]) || EMERGENCY_FALLBACK_RATES[curr] || 1);
+  const spec = SUPPORTED_CURRENCIES[curr] || { decimals: 2 };
+  const raw = usdAmount * rate;
+  if (spec.decimals === 0 || rate >= 100) {
+    return Math.round(raw).toFixed(2);
+  }
+  const rounded = Number(raw.toFixed(spec.decimals));
+  return rounded.toFixed(2);
+}
+
+const CURRENCY_COUNTRY_MAP = Object.fromEntries(
+  Object.entries(SUPPORTED_CURRENCIES).map(([code, meta]) => [code, meta.country])
+);
 
 const NAMED_PACKS = {
   pack_createur: {
@@ -194,29 +284,37 @@ function applyPromoDiscountUSD(baseUsd, promo) {
 
 async function computeAuthoritativeOrder({ pack_id, pack_name, credits, currency, promo_code }) {
   const normalizedPromo = String(promo_code || '').trim().toUpperCase();
+  const fx = await getLiveCurrencyRates();
+  const ratesMap = fx.rates || EMERGENCY_FALLBACK_RATES;
 
   if (pack_id && NAMED_PACKS[pack_id]) {
     const pack = NAMED_PACKS[pack_id];
     const requestedCurr = String(currency || pack.currency).trim().toUpperCase();
-    const effectiveCurr = CURRENCY_RATES[requestedCurr] ? requestedCurr : pack.currency;
-    const baseUsd = +(pack.amount / CURRENCY_RATES[pack.currency]).toFixed(2);
+    const effectiveCurr = SUPPORTED_CURRENCIES[requestedCurr] ? requestedCurr : pack.currency;
+    const packCurrRate = Number(ratesMap[pack.currency]) || 1;
+    const baseUsd = +(pack.amount / packCurrRate).toFixed(2);
     const promoRow = normalizedPromo ? await resolvePromoFromDb(normalizedPromo, pack.credits) : null;
     const { finalUsd, discountUsd } = applyPromoDiscountUSD(baseUsd, promoRow);
-    const rate = CURRENCY_RATES[effectiveCurr];
-    const rawAmount = effectiveCurr === pack.currency && !promoRow ? pack.amount : finalUsd * rate;
-    const formattedAmount = (rate >= 100 ? Math.round(rawAmount) : +rawAmount.toFixed(2)).toFixed(2);
+    const formattedAmount = (effectiveCurr === pack.currency && !promoRow)
+      ? pack.amount.toFixed(2)
+      : formatConvertedAmount(finalUsd, effectiveCurr, ratesMap);
+    const baseAmountDecimal = (effectiveCurr === pack.currency)
+      ? pack.amount.toFixed(2)
+      : formatConvertedAmount(baseUsd, effectiveCurr, ratesMap);
 
     return {
       packId: pack.id,
       packName: pack_name || pack.name,
       credits: pack.credits,
       amountDecimal: formattedAmount,
-      baseAmountDecimal: ((effectiveCurr === pack.currency ? pack.amount : (rate >= 100 ? Math.round(baseUsd * rate) : +(baseUsd * rate).toFixed(2)))).toFixed(2),
+      baseAmountDecimal,
       currency: effectiveCurr,
       amountUSD: finalUsd,
       baseUSD: baseUsd,
       discountUSD: discountUsd,
-      amountCDF: Math.round(finalUsd * CURRENCY_RATES.CDF),
+      amountCDF: Math.round(finalUsd * (ratesMap.CDF || EMERGENCY_FALLBACK_RATES.CDF)),
+      fxRate: Number(ratesMap[effectiveCurr] || 1),
+      fxSource: fx.source,
       promoCode: promoRow ? promoRow.code : null,
       promo: promoRow,
       country: CURRENCY_COUNTRY_MAP[effectiveCurr] || null,
@@ -232,27 +330,26 @@ async function computeAuthoritativeOrder({ pack_id, pack_name, credits, currency
 
   const promoRow = normalizedPromo ? await resolvePromoFromDb(normalizedPromo, qty) : null;
   const reqCurr = String(currency || 'USD').trim().toUpperCase();
-  const effectiveCurr = CURRENCY_RATES[reqCurr] ? reqCurr : 'USD';
-  const rate = CURRENCY_RATES[effectiveCurr];
+  const effectiveCurr = SUPPORTED_CURRENCIES[reqCurr] ? reqCurr : 'USD';
 
   const baseUsd = +(qty * CREDIT_PRICE_USD).toFixed(2);
   const { finalUsd, discountUsd } = applyPromoDiscountUSD(baseUsd, promoRow);
-  const rawBaseAmount = baseUsd * rate;
-  const rawAmount = finalUsd * rate;
-  const normalizedBaseAmount = rate >= 100 ? Math.round(rawBaseAmount) : +rawBaseAmount.toFixed(2);
-  const normalizedAmount = rate >= 100 ? Math.round(rawAmount) : +rawAmount.toFixed(2);
+  const baseAmountDecimal = formatConvertedAmount(baseUsd, effectiveCurr, ratesMap);
+  const amountDecimal = formatConvertedAmount(finalUsd, effectiveCurr, ratesMap);
 
   return {
     packId: pack_id || 'custom_credits',
     packName: pack_name || `Recharge ${qty} Crédits`,
     credits: qty,
-    amountDecimal: normalizedAmount.toFixed(2),
-    baseAmountDecimal: normalizedBaseAmount.toFixed(2),
+    amountDecimal,
+    baseAmountDecimal,
     currency: effectiveCurr,
     amountUSD: finalUsd,
     baseUSD: baseUsd,
     discountUSD: discountUsd,
-    amountCDF: Math.round(finalUsd * CURRENCY_RATES.CDF),
+    amountCDF: Math.round(finalUsd * (ratesMap.CDF || EMERGENCY_FALLBACK_RATES.CDF)),
+    fxRate: Number(ratesMap[effectiveCurr] || 1),
+    fxSource: fx.source,
     promoCode: promoRow ? promoRow.code : null,
     promo: promoRow,
     country: CURRENCY_COUNTRY_MAP[effectiveCurr] || null,
@@ -400,8 +497,11 @@ async function creditOrderOnce(order, { paymentId = null, reference = null, rawP
     }
 
     const txId = `TX-SP-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`;
-    const amountUSD = Number(((Number(updatedOrder.amount) || 0) / (CURRENCY_RATES[updatedOrder.currency] || 1)).toFixed(2));
-    const amountCDF = Math.round(amountUSD * CURRENCY_RATES.CDF);
+    const fx = await getLiveCurrencyRates();
+    const ratesMap = fx.rates || EMERGENCY_FALLBACK_RATES;
+    const paidRate = Number(ratesMap[updatedOrder.currency] || 1);
+    const amountUSD = Number(((Number(updatedOrder.amount) || 0) / paidRate).toFixed(2));
+    const amountCDF = Math.round(amountUSD * (ratesMap.CDF || EMERGENCY_FALLBACK_RATES.CDF));
 
     await client.query(
       `INSERT INTO transactions (id, user_id, pack, credits, amount_usd, amount_cdf, method, status)
@@ -609,6 +709,25 @@ async function verifyAndFulfillOrder({ orderId = null, sessionId = null, payment
 }
 
 function registerSaspayRoutes(app) {
+  // 0. Taux de change en temps réel (GET /api/fx/rates)
+  app.get('/api/fx/rates', async (req, res) => {
+    try {
+      const force = req.query.refresh === '1';
+      const fx = await getLiveCurrencyRates(force);
+      return res.json({
+        success: true,
+        base: 'USD',
+        creditPriceUSD: CREDIT_PRICE_USD,
+        source: fx.source,
+        updatedAt: fx.updatedAt || new Date().toISOString(),
+        rates: fx.rates,
+        currencies: SUPPORTED_CURRENCIES,
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // 1. Initialisation d'une session de paiement hébergée SasPay (POST /api/payments/saspay/checkout)
   app.post('/api/payments/saspay/checkout', async (req, res) => {
     try {
@@ -672,16 +791,53 @@ function registerSaspayRoutes(app) {
           pack_id: orderSpec.packId,
           pack_name: orderSpec.packName,
           promo_code: orderSpec.promoCode || '',
+          display_currency: orderSpec.currency,
+          display_amount: orderSpec.amountDecimal,
         },
       };
       if (orderSpec.country) {
         saspayPayload.country = orderSpec.country;
       }
 
-      const sessionData = await saspayRequest('/checkout-sessions/', {
-        method: 'POST',
-        body: saspayPayload,
-      });
+      let billedCurrency = orderSpec.currency;
+      let billedAmount = orderSpec.amountDecimal;
+      let sessionData = null;
+
+      try {
+        sessionData = await saspayRequest('/checkout-sessions/', {
+          method: 'POST',
+          body: saspayPayload,
+        });
+      } catch (primaryErr) {
+        const msg = String(primaryErr.message || '');
+        const isCurrencyMismatch = /currenc|devise|paytabs|unsupported|not supported|not allowed|invalid.*currency|profile|invalid amount/i.test(msg);
+        if (isCurrencyMismatch && orderSpec.currency !== 'USD') {
+          billedCurrency = 'USD';
+          billedAmount = orderSpec.amountUSD.toFixed(2);
+          const fallbackPayload = {
+            ...saspayPayload,
+            amount: billedAmount,
+            currency: 'USD',
+            description: `${saspayPayload.description} [Converti depuis ${orderSpec.amountDecimal} ${orderSpec.currency}]`,
+            metadata: {
+              ...saspayPayload.metadata,
+              billed_currency: 'USD',
+              billed_amount: billedAmount,
+            },
+          };
+          delete fallbackPayload.country;
+          await query(
+            'UPDATE payment_transactions SET amount = $2, currency = $3, updated_at = NOW() WHERE id = $1',
+            [orderId, billedAmount, billedCurrency]
+          );
+          sessionData = await saspayRequest('/checkout-sessions/', {
+            method: 'POST',
+            body: fallbackPayload,
+          });
+        } else {
+          throw primaryErr;
+        }
+      }
 
       if (!sessionData.checkout_url || !sessionData.id) {
         throw new Error('Réponse SasPay invalide : checkout_url manquant.');
@@ -703,11 +859,15 @@ function registerSaspayRoutes(app) {
         orderId,
         sessionId: sessionData.id,
         checkoutUrl: sessionData.checkout_url,
-        amount: orderSpec.amountDecimal,
+        amount: billedAmount,
+        currency: billedCurrency,
+        displayAmount: orderSpec.amountDecimal,
+        displayCurrency: orderSpec.currency,
+        fxRate: orderSpec.fxRate,
+        fxSource: orderSpec.fxSource,
         baseAmount: orderSpec.baseAmountDecimal,
         discountUSD: orderSpec.discountUSD,
         promoCode: orderSpec.promoCode,
-        currency: orderSpec.currency,
         credits: orderSpec.credits,
       });
     } catch (err) {

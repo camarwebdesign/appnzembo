@@ -1072,11 +1072,15 @@
                 creditsEarned: Math.max(0, Number(json.referralStats.creditsEarned) || 0),
                 cashEarnedUSD: Number(json.referralStats.cashEarnedUSD) || 0
               };
-              if (json.user.referral_code) {
-                store.userAccount.referralLink = `https://nzembo.net/invite/${json.user.referral_code}`;
+              if (json.user.referral_code && json.user.referral_code !== 'NZ-84920') {
+                userObj.referral_code = String(json.user.referral_code).trim().toUpperCase();
+                store.userAccount.referralLink = `https://nzembo.net/invite/${userObj.referral_code}`;
               }
               window.NzemboStore.save(store);
             } catch {}
+          }
+          if (json.user.referral_code && json.user.referral_code !== 'NZ-84920') {
+            userObj.referral_code = String(json.user.referral_code).trim().toUpperCase();
           }
           return Number(json.credits ?? json.user.credits ?? 0);
         }
@@ -1541,12 +1545,14 @@
       setUserOtpVerified(authUser.id);
 
       let profile = null;
+      const uidRefFallback = 'NZ-' + authUser.id.replace(/-/g, '').substring(0, 8).toUpperCase();
       try {
         const { data: profData } = await sb.from('profiles').select('*').eq('id', authUser.id).maybeSingle();
         profile = profData;
         if (!profile) {
           const fallbackName = authUser.user_metadata?.full_name || authUser.user_metadata?.name || email.split('@')[0];
-          const fallbackRef = authUser.user_metadata?.referral_code || ('NZ-' + authUser.id.substring(0, 5).toUpperCase());
+          const rawMetaRef = authUser.user_metadata?.referral_code;
+          const fallbackRef = (rawMetaRef && rawMetaRef !== 'NZ-84920') ? rawMetaRef : uidRefFallback;
           const { data: ups } = await sb.from('profiles').upsert([{
             id: authUser.id,
             email: authUser.email || email,
@@ -1559,7 +1565,8 @@
       } catch {}
 
       const fallbackName = authUser.user_metadata?.full_name || authUser.user_metadata?.name || email.split('@')[0];
-      const fallbackRef = (profile && profile.referral_code) || authUser.user_metadata?.referral_code || ('NZ-' + authUser.id.substring(0, 5).toUpperCase());
+      const candidateRef = (profile && profile.referral_code) || authUser.user_metadata?.referral_code || uidRefFallback;
+      const fallbackRef = (candidateRef && candidateRef !== 'NZ-84920') ? candidateRef : uidRefFallback;
       const userObj = {
         id: authUser.id,
         email: authUser.email || email,
@@ -1600,7 +1607,10 @@
       setCurrentUser(null);
 
       const sb = getSupabaseOrThrow();
-      const generatedRefCode = 'NZ-' + Math.floor(10000 + Math.random() * 90000);
+      const randBytes = (typeof crypto !== 'undefined' && crypto.getRandomValues)
+        ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase()
+        : (Date.now().toString(36) + Math.random().toString(36).slice(2, 6)).toUpperCase().slice(0, 8);
+      const generatedRefCode = 'NZ-' + randBytes;
       const cleanRefUsed = (resolvedRefInput && resolvedRefInput !== generatedRefCode) ? resolvedRefInput : '';
       const redirectUrl = buildAuthRedirectUrl('/');
 
@@ -1669,7 +1679,9 @@
         }
       } catch {}
 
-      const finalOwnRefCode = (profile && profile.referral_code) || generatedRefCode;
+      const finalOwnRefCode = (profile && profile.referral_code && profile.referral_code !== 'NZ-84920')
+        ? profile.referral_code
+        : ('NZ-' + authUser.id.replace(/-/g, '').substring(0, 8).toUpperCase());
       const effectiveRefUsed = (cleanRefUsed && cleanRefUsed !== finalOwnRefCode.toUpperCase())
         ? cleanRefUsed
         : (authUser.user_metadata?.referral_code_used || null);
@@ -1813,9 +1825,11 @@
 
         setUserOtpVerified(userId);
 
+        const uidRefFallback = 'NZ-' + String(userId).replace(/-/g, '').slice(0, 8).toUpperCase();
         let { data: profile } = await sb.from('profiles').select('*').eq('id', userId).maybeSingle();
         if (!profile && authUser) {
-          const generatedRef = authUser.user_metadata?.referral_code || ('NZ-' + authUser.id.substring(0, 5).toUpperCase());
+          const rawMetaRef = authUser.user_metadata?.referral_code;
+          const generatedRef = (rawMetaRef && rawMetaRef !== 'NZ-84920') ? rawMetaRef : uidRefFallback;
           const userName = authUser.user_metadata?.full_name || authUser.user_metadata?.name || (authUser.email ? authUser.email.split('@')[0] : 'Artiste');
           const { data: insData } = await sb.from('profiles').upsert([{
             id: authUser.id,
@@ -1840,6 +1854,7 @@
         const avatarUrl = getSavedAvatarForUser(userId) || (profile && profile.avatar_url) || authUser?.user_metadata?.avatar_url || authUser?.user_metadata?.picture || null;
         const dbSbCredits = (profile && profile.credits !== undefined && profile.credits !== null) ? Math.max(0, Number(profile.credits) || 0) : 0;
 
+        const candidateRef = (profile && profile.referral_code) || authUser?.user_metadata?.referral_code || uidRefFallback;
         const baseUser = {
           id: userId,
           email: (profile && profile.email) || (authUser ? authUser.email : (current ? current.email : '')),
@@ -1847,7 +1862,7 @@
           first_name: firstName,
           avatar_url: avatarUrl,
           credits: dbSbCredits,
-          referral_code: (profile && profile.referral_code) || authUser?.user_metadata?.referral_code || ('NZ-' + String(userId).slice(0, 5).toUpperCase()),
+          referral_code: (candidateRef && candidateRef !== 'NZ-84920') ? candidateRef : uidRefFallback,
           referral_code_used: authUser?.user_metadata?.referral_code_used || null
         };
 
@@ -1954,53 +1969,88 @@
       }
     },
 
-    generateMusic: async function({ prompt, style, occasion, recipient, relationship = '', language = '', secondaryLanguage = '', lyrics, isInstrumental = false, make_instrumental, instrumental, gender = 'female', title = '', styleConfig = null, tags = '', custom_mode, customMode, count = 1, personaId = '', personaModel = 'voice_persona' }) {
+    generateMusic: async function({ prompt, style, styleId = '', styleName = '', occasion, recipient, relationship = '', language = '', secondaryLanguage = '', lyrics, isInstrumental = false, make_instrumental, instrumental, gender = 'female', voiceGenderLabel = '', timbre = '', title = '', styleConfig = null, tags = '', custom_mode, customMode, count = 1, personaId = '', personaModel = 'voice_persona', customCoverUrl = '', isCustomCover = false }) {
       const currentBal = await this.getUserCredits();
       if (currentBal < 1) {
         throw new Error('Solde insuffisant. Recharge tes crédits pour créer une chanson.');
       }
 
       const isInstru = Boolean(isInstrumental || make_instrumental || instrumental);
+      const styleLookupKey = String(styleId || styleName || style || '').trim();
       let resolvedStyleConfig = styleConfig;
       if (!resolvedStyleConfig && typeof window !== 'undefined' && typeof window.getMusicStyleConfig === 'function') {
-        resolvedStyleConfig = window.getMusicStyleConfig(style);
+        resolvedStyleConfig = window.getMusicStyleConfig(styleLookupKey);
       }
       if (!resolvedStyleConfig && typeof MUSIC_STYLES_DICTIONARY !== 'undefined') {
-        resolvedStyleConfig = MUSIC_STYLES_DICTIONARY[style] || MUSIC_STYLES_DICTIONARY["rumba_congolaise"];
+        resolvedStyleConfig = MUSIC_STYLES_DICTIONARY[styleLookupKey] || MUSIC_STYLES_DICTIONARY["rumba_congolaise"];
       }
 
-      const styleDisplayName = resolvedStyleConfig ? resolvedStyleConfig.name : (style || 'Rumba congolaise');
+      const styleDisplayName = (styleName || (resolvedStyleConfig && resolvedStyleConfig.name) || style || 'Rumba congolaise').trim();
       const songTitle = (title || (recipient ? `Pour ${recipient} (${styleDisplayName})` : `${occasion || 'Chanson'} (${styleDisplayName})`)).slice(0, 80);
 
-      let engineStyle = tags || (resolvedStyleConfig ? (resolvedStyleConfig.sunoStylePrompt || resolvedStyleConfig.mandatoryTags) : styleDisplayName);
-      if (!isInstru && language) {
-        const isBilingual = Boolean(secondaryLanguage && secondaryLanguage.toLowerCase() !== language.toLowerCase());
-        const langHeader = isBilingual
-          ? `${language} and ${secondaryLanguage} bilingual vocals, sing in ${language} and ${secondaryLanguage}`
-          : `100% ${language} vocals only, strictly sing in ${language}`;
-        if (!engineStyle.toLowerCase().includes(language.toLowerCase()) || !engineStyle.toLowerCase().includes('sing in')) {
-          engineStyle = langHeader + ', ' + engineStyle;
-        }
+      // Construction stricte du champ style envoyé au moteur audio : instruments authentiques + tempo + langue + voix & timbre
+      const styleParts = [];
+      if (resolvedStyleConfig && (resolvedStyleConfig.sunoStylePrompt || resolvedStyleConfig.mandatoryTags)) {
+        styleParts.push(resolvedStyleConfig.sunoStylePrompt || resolvedStyleConfig.mandatoryTags);
+      } else {
+        styleParts.push(styleDisplayName);
       }
-      if (!isInstru && !personaId) {
-        let genderTag = '';
-        const gLower = String(gender || '').toLowerCase();
-        if (gLower === 'male' || gLower.includes('masculin') || gLower.includes('homme') || gLower === 'm') {
-          genderTag = 'male vocals, solo male singer, masculine tone';
-        } else if (gLower === 'female' || gLower.includes('feminin') || gLower.includes('féminin') || gLower.includes('femme') || gLower === 'f') {
-          genderTag = 'female vocals, solo female singer, feminine tone';
-        } else if (gLower.includes('duo') || gLower.includes('duet')) {
-          genderTag = 'male and female duet vocals, vocal harmony';
-        } else if (gLower.includes('choeur') || gLower.includes('chœur') || gLower.includes('gospel')) {
-          genderTag = 'gospel choir vocals, vocal ensemble';
-        }
-        if (genderTag && !engineStyle.toLowerCase().includes('male vocal') && !engineStyle.toLowerCase().includes('female vocal') && !engineStyle.toLowerCase().includes('duet') && !engineStyle.toLowerCase().includes('choir')) {
-          engineStyle = genderTag + ', ' + engineStyle;
-        }
-      } else if (personaId && !engineStyle.toLowerCase().includes('persona')) {
-        engineStyle += ', custom vocal persona';
+      if (!styleParts[0].toLowerCase().includes(styleDisplayName.toLowerCase())) {
+        styleParts.unshift(styleDisplayName);
+      }
+      if (resolvedStyleConfig && resolvedStyleConfig.bpm) {
+        styleParts.push(resolvedStyleConfig.bpm);
       }
 
+      if (!isInstru && language) {
+        const isBilingual = Boolean(secondaryLanguage && secondaryLanguage.toLowerCase() !== language.toLowerCase());
+        styleParts.push(
+          isBilingual
+            ? `Bilingual vocals sung in ${language} and ${secondaryLanguage}`
+            : `Sung strictly in ${language} language vocals only`
+        );
+      }
+
+      if (!isInstru && !personaId) {
+        const gRaw = String(voiceGenderLabel || gender || '').toLowerCase();
+        if (gRaw.includes('duo')) {
+          styleParts.push('male and female vocal duet harmony');
+        } else if (gRaw.includes('choeur') || gRaw.includes('chœur') || gRaw.includes('groupe')) {
+          styleParts.push('gospel choir vocal ensemble harmonies');
+        } else if (gRaw.includes('lead homme') && gRaw.includes('ch')) {
+          styleParts.push('lead male vocalist with female backing choir');
+        } else if (gRaw.includes('lead femme') && gRaw.includes('ch')) {
+          styleParts.push('lead female vocalist with male backing choir');
+        } else if (gRaw === 'male' || gRaw === 'm' || gRaw.includes('masculin') || gRaw.includes('homme')) {
+          styleParts.push('solo male vocalist, male voice');
+        } else {
+          styleParts.push('solo female vocalist, female voice');
+        }
+
+        const tRaw = String(timbre || '').toLowerCase();
+        let hasCustomTimbre = false;
+        if (tRaw.includes('alto') || tRaw.includes('chaude et profonde')) { styleParts.push('warm deep resonant female alto vocal timbre'); hasCustomTimbre = true; }
+        else if (tRaw.includes('soprano') || tRaw.includes('cristalline')) { styleParts.push('bright crystalline high soprano vocal timbre'); hasCustomTimbre = true; }
+        else if (tRaw.includes('basse') || tRaw.includes('très grave') || tRaw.includes('grave et puissante')) { styleParts.push('deep powerful low bass vocal timbre'); hasCustomTimbre = true; }
+        else if (tRaw.includes('baryton')) { styleParts.push('warm expressive baritone vocal timbre'); hasCustomTimbre = true; }
+        else if (tRaw.includes('ténor') || tRaw.includes('tenor')) { styleParts.push('vibrant lyrical tenor vocal timbre'); hasCustomTimbre = true; }
+        else if (tRaw.includes('rumba') || tRaw.includes('lyrique')) { styleParts.push('lyrical vibrant Congolese rumba vocal timbre'); hasCustomTimbre = true; }
+        else if (tRaw.includes('acoustique') || tRaw.includes('feutr')) { styleParts.push('soft intimate breathy acoustic soul vocal tone'); hasCustomTimbre = true; }
+        else if (tRaw.includes('gospel')) { styleParts.push('powerful soulful expressive gospel vocal projection'); hasCustomTimbre = true; }
+        else if (tRaw.includes('r&b') || tRaw.includes('velout')) { styleParts.push('smooth velvety modern R&B vocal tone'); hasCustomTimbre = true; }
+        else if (tRaw.includes('enfant')) { styleParts.push('clear pure youthful child vocal tone'); hasCustomTimbre = true; }
+        else if (tRaw && !tRaw.includes('naturel')) { styleParts.push(timbre); hasCustomTimbre = true; }
+
+        if (resolvedStyleConfig && resolvedStyleConfig.vocalStyle && !hasCustomTimbre) {
+          styleParts.push(resolvedStyleConfig.vocalStyle);
+        }
+      } else if (isInstru) {
+        styleParts.push('100% pure instrumental, no vocals, no singing');
+      } else if (personaId) {
+        styleParts.push('custom vocal persona');
+      }
+
+      const engineStyle = styleParts.filter(Boolean).join(', ');
       const hasCustomLyrics = Boolean(!isInstru && lyrics && lyrics.trim().length > 0);
       const isCustomMode = (custom_mode !== undefined) ? Boolean(custom_mode) : ((customMode !== undefined) ? Boolean(customMode) : (hasCustomLyrics || isInstru));
 
@@ -2008,12 +2058,8 @@
       if (isInstru) {
         lyricPrompt = '';
       } else if (hasCustomLyrics) {
-        const rawLyr = lyrics.trim();
-        const isBilingual = Boolean(secondaryLanguage && secondaryLanguage.toLowerCase() !== language.toLowerCase());
-        const langTag = language
-          ? (isBilingual ? `[Language: ${language} & ${secondaryLanguage} Bilingual]\n` : `[Language: ${language} ONLY (100% Monolingual)]\n`)
-          : '';
-        lyricPrompt = (rawLyr.startsWith('[Language:') ? rawLyr : (langTag + rawLyr)).slice(0, 5000);
+        // Nettoyer d'éventuels méta-commentaires non musicaux entre crochets sur la 1re ligne tout en préservant [Intro], [Couplet], [Refrain], etc.
+        lyricPrompt = lyrics.replace(/^\[Language:[^\]]*\]\s*\n?/i, '').trim().slice(0, 5000);
       } else {
         const langNote = language ? (secondaryLanguage ? ` chantée en ${language} et ${secondaryLanguage}` : ` chantée exclusivement en ${language}`) : '';
         const recNote = recipient ? ` dédiée à ${recipient}` : '';
@@ -2029,15 +2075,19 @@
         callBackUrl: WEBHOOK_NOOP_URL
       };
 
+      if (resolvedStyleConfig && resolvedStyleConfig.forbiddenTags) {
+        payload.negativeTags = String(resolvedStyleConfig.forbiddenTags).replace(/^No\s+/i, '').slice(0, 200);
+      }
+
       if (personaId) {
         payload.personaId = personaId;
         payload.personaModel = personaModel || 'voice_persona';
       }
 
       if (!isInstru && !personaId) {
-        const gLower = String(gender || '').toLowerCase();
-        if (gLower === 'male' || gLower.includes('masculin') || gLower.includes('homme') || gLower === 'm') payload.vocalGender = 'm';
-        else if (gLower === 'female' || gLower.includes('feminin') || gLower.includes('féminin') || gLower.includes('femme') || gLower === 'f') payload.vocalGender = 'f';
+        const gLower = String(voiceGenderLabel || gender || '').toLowerCase();
+        if (gLower === 'male' || gLower.includes('masculin') || gLower.includes('lead homme') || gLower === 'm') payload.vocalGender = 'm';
+        else if (gLower === 'female' || gLower.includes('feminin') || gLower.includes('féminin') || gLower.includes('lead femme') || gLower === 'f') payload.vocalGender = 'f';
       }
 
       if (isCustomMode) {
@@ -2068,6 +2118,7 @@
 
       const taskId = data.data.taskId;
       const songId = 'nz_' + Date.now();
+      const preservedCover = (isCustomCover && customCoverUrl) ? customCoverUrl : '';
 
       await saveCreation({
         id: songId,
@@ -2078,9 +2129,19 @@
         style: styleDisplayName,
         occasion: occasion,
         recipient: recipient,
+        coverUrl: preservedCover,
+        albumCover: preservedCover,
         toolCategory: 'generation',
         status: 'en_cours',
-        isProcessing: true
+        isProcessing: true,
+        metadata: {
+          styleId: styleLookupKey,
+          language,
+          secondaryLanguage: secondaryLanguage || '',
+          timbre: timbre || '',
+          isCustomUploadedCover: Boolean(isCustomCover && preservedCover),
+          customCoverUrl: preservedCover
+        }
       }).catch(() => {});
 
       const nextCredits = await this.deductCredits(1, `Création : ${songTitle}`, taskId);
@@ -2116,19 +2177,43 @@
           if ((status === 'SUCCESS' || (status === 'FIRST_SUCCESS' && hasReadyTrack)) && hasReadyTrack) {
             const track1 = taskData.response.sunoData[0] || {};
             const audio1 = await persistMediaLocally(track1.audio_url || track1.stream_audio_url, 'audio', track1.id || `${taskId}_1`);
-            const albumCover = await persistMediaLocally(track1.image_url || track1.source_image_url, 'image', `${taskId}_cover`);
 
-            await updateCreation(taskId, {
+            // Vérifier si l'utilisateur a uploadé sa propre photo de pochette pour ne jamais l'écraser
+            let existingCustomCover = '';
+            try {
+              const localList = (typeof window !== 'undefined' && Array.isArray(window.userSongs)) ? window.userSongs : [];
+              const locMatch = localList.find(s => s && (s.taskId === taskId || s.id === taskId));
+              if (locMatch && (locMatch._customCoverUpdated || (locMatch.metadata && locMatch.metadata.isCustomUploadedCover))) {
+                existingCustomCover = locMatch.albumCover || locMatch.coverUrl || locMatch.metadata?.customCoverUrl || '';
+              }
+              if (!existingCustomCover) {
+                const sb = getSupabase();
+                if (sb) {
+                  const { data: row } = await sb.from('creations').select('cover_url,album_cover,metadata').or(`id.eq.${taskId},task_id.eq.${taskId}`).maybeSingle();
+                  if (row && row.metadata && row.metadata.isCustomUploadedCover) {
+                    existingCustomCover = row.album_cover || row.cover_url || row.metadata.customCoverUrl || '';
+                  }
+                }
+              }
+            } catch {}
+
+            const albumCover = existingCustomCover || await persistMediaLocally(track1.image_url || track1.source_image_url, 'image', `${taskId}_cover`);
+
+            const updatePayload = {
               status: 'termine',
               isProcessing: false,
               audioUrl: audio1,
               audioUrl2: null,
-              albumCover: albumCover,
               title: track1.title,
               lyrics: track1.prompt,
               audioId: track1.id,
               audioId2: null
-            }).catch(() => {});
+            };
+            if (!existingCustomCover) {
+              updatePayload.albumCover = albumCover;
+              updatePayload.coverUrl = albumCover;
+            }
+            await updateCreation(taskId, updatePayload).catch(() => {});
 
             const doneResult = {
               completed: true,
@@ -2137,6 +2222,7 @@
               audioUrl: audio1,
               audioUrl2: null,
               albumCover: albumCover,
+              hasCustomCover: Boolean(existingCustomCover),
               lyrics: track1.prompt,
               duration: track1.duration,
               audioId: track1.id,
@@ -2282,20 +2368,21 @@
         const recipient = String(input.recipient || '').trim();
         const tone = String(input.tone || '').trim();
         const rawStory = String(input.story || input.theme || input.prompt || '').replace(/\s+/g, ' ').trim();
-
-        const langDir = lang ? (isBilingual ? `Écris en mélange bilingue ${lang}+${secLang}.` : `Écris toutes les paroles en ${lang}, sans mélange.`) : '';
-        const occPart = occasion ? ` ${occasion}.` : '';
-        const stylePart = style ? ` Style: ${style}.` : '';
-        const tonePart = tone ? ` Ton: ${tone}.` : '';
-        const recPart = recipient ? ` Pour: ${recipient}.` : '';
         const hasStory = Boolean(rawStory && rawStory.length >= 10);
-        const storyIntro = hasStory ? ` Histoire vraie: ` : ` Thème: `;
         const storyContent = hasStory ? rawStory : (rawStory || `Célébration ${occasion || 'joyeuse'}`);
 
-        const prefix = `${langDir}${occPart}${stylePart}${tonePart}${recPart} Structure: couplet, refrain, pont.${storyIntro}`.trim();
-        const remain = Math.max(20, 198 - prefix.length);
+        const prefix = [
+          lang ? (isBilingual ? `Langue:${lang}+${secLang}` : `Langue:${lang} uniquement`) : '',
+          style ? `Style:${style}` : '',
+          recipient ? `Pour:${recipient}` : '',
+          occasion ? `Occasion:${occasion}` : '',
+          tone ? `Ton:${tone}` : ''
+        ].filter(Boolean).join('|');
+        const storyLabel = hasStory ? 'Histoire:' : 'Thème:';
+        const header = prefix ? `${prefix}|${storyLabel}` : storyLabel;
+        const remain = Math.max(30, 198 - header.length);
         const clippedTheme = storyContent.length > remain ? storyContent.slice(0, remain).replace(/\s+\S*$/, '') : storyContent;
-        condensedPrompt = `${prefix} ${clippedTheme}`.replace(/\s+/g, ' ').trim();
+        condensedPrompt = `${header}${clippedTheme}`.replace(/\s+/g, ' ').trim();
       } else {
         const lang = String(languageOverride || '').trim();
         const raw = String(input || 'Chanson joyeuse pleine d\'émotion').replace(/\s+/g, ' ').trim();

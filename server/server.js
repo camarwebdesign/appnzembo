@@ -335,7 +335,27 @@ app.post('/api/users/sync', async (req, res) => {
 
     const isNewSignup = Boolean(body.isNewSignup);
     const name = String(body.name || sbUser?.user_metadata?.full_name || sbUser?.user_metadata?.name || email.split('@')[0]).trim();
-    const refCode = String(body.referral_code || sbUser?.user_metadata?.referral_code || ('NZ-' + uid.slice(0, 5).toUpperCase())).trim().toUpperCase();
+    let refCode = String(body.referral_code || sbUser?.user_metadata?.referral_code || '').trim().toUpperCase();
+    if (!refCode || refCode === 'NZ-84920') {
+      refCode = 'NZ-' + uid.replace(/-/g, '').slice(0, 8).toUpperCase();
+    }
+    const ensureUniqueRefCode = async (candidate, excludeUserId) => {
+      let current = String(candidate || '').trim().toUpperCase();
+      if (!current || current === 'NZ-84920') {
+        current = 'NZ-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+      }
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const dup = await query(
+          `SELECT id FROM users WHERE UPPER(referral_code) = UPPER($1) AND id <> $2 LIMIT 1`,
+          [current, excludeUserId]
+        );
+        if (dup.rows.length === 0) return current;
+        current = 'NZ-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+      }
+      return 'NZ-' + crypto.randomBytes(5).toString('hex').toUpperCase();
+    };
+    refCode = await ensureUniqueRefCode(refCode, uid);
+
     let rawReferredBy = String(body.referred_by || body.referralCodeUsed || sbUser?.user_metadata?.referral_code_used || '').trim().toUpperCase();
     if (rawReferredBy && rawReferredBy === refCode) {
       rawReferredBy = '';
@@ -346,9 +366,12 @@ app.post('/api/users/sync', async (req, res) => {
     let savedUser = null;
     if (existing.rows.length > 0) {
       const row = existing.rows[0];
+      const existingRef = (row.referral_code && row.referral_code !== 'NZ-84920')
+        ? String(row.referral_code).trim().toUpperCase()
+        : refCode;
       const upd = await query(
-        `UPDATE users SET id = $1, name = COALESCE(NULLIF($2, ''), name), email = $3, referral_code = COALESCE(NULLIF(referral_code, ''), $5), referred_by = COALESCE(NULLIF(referred_by, ''), $6) WHERE id = $4 RETURNING *`,
-        [uid, name, email, row.id, refCode, referredBy]
+        `UPDATE users SET id = $1, name = COALESCE(NULLIF($2, ''), name), email = $3, referral_code = $5, referred_by = COALESCE(NULLIF(referred_by, ''), $6) WHERE id = $4 RETURNING *`,
+        [uid, name, email, row.id, existingRef, referredBy]
       );
       savedUser = upd.rows[0];
     } else {

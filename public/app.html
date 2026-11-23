@@ -469,7 +469,7 @@
         <!-- Code de parrainage (optionnel pour inscription) -->
         <div id="auth-field-referral" class="hidden space-y-1">
           <label class="block font-bold text-[var(--nz-text)]">Code de parrainage (optionnel)</label>
-          <input type="text" id="auth-input-referral" placeholder="Ex : NZ-84920" class="app-input py-2 bg-[var(--nz-bg)] border border-[var(--nz-border)] text-[var(--nz-text)] font-mono uppercase">
+          <input type="text" id="auth-input-referral" placeholder="Ex : NZ-A1B2C3D4" class="app-input py-2 bg-[var(--nz-bg)] border border-[var(--nz-border)] text-[var(--nz-text)] font-mono uppercase">
         </div>
 
         <button type="submit" id="auth-submit-btn" class="btn-primary w-full py-3 rounded-[10px] font-bold text-xs flex items-center justify-center gap-2 mt-4 cursor-pointer">
@@ -2187,17 +2187,22 @@
             <p id="result-subtitle" class="text-xs text-slate-500 dark:text-slate-300 mt-0.5">Composée sur mesure pour toi</p>
           </div>
 
-          <!-- Waveform Player -->
-          <div class="bg-[var(--nz-surface)] p-4 sm:p-5 rounded-2xl border border-[var(--nz-border)] shadow-sm">
-            <div class="flex items-center justify-between mb-3">
-              <div class="flex items-center gap-3">
-                <img id="player-album-cover" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><rect width='200' height='200' fill='%2312241C'/><circle cx='145' cy='60' r='70' fill='%23254434' opacity='0.75'/><circle cx='55' cy='150' r='85' fill='%230D1B14' opacity='0.8'/><path d='M25 110 Q60 75 100 110 T175 110' fill='none' stroke='%23E8A317' stroke-width='5' stroke-linecap='round' opacity='0.95'/><path d='M25 130 Q60 95 100 130 T175 130' fill='none' stroke='%23E8A317' stroke-width='3' stroke-linecap='round' opacity='0.5'/></svg>" alt="Pochette" class="w-12 h-12 rounded-xl object-cover border border-[var(--nz-border)] dark:border-[var(--nz-border)] shadow-sm hidden">
-                <div>
-                  <span id="player-style-badge" class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-[var(--nz-accent-soft)] text-[var(--nz-accent)] dark:bg-[var(--nz-track)]  border border-[var(--nz-border)] dark:border-[var(--nz-border)]">Afrobeat</span>
-                  <h4 id="player-song-title" class="font-bold text-slate-900 dark:text-white text-base mt-1">Titre de la chanson</h4>
+          <!-- Waveform Player (aligné sur le modèle de carte épuré Accueil + menu 3 points) -->
+          <div class="bg-[var(--nz-surface)] p-4 sm:p-5 rounded-[12px] border border-[var(--nz-border)] shadow-sm">
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <div class="flex items-center gap-3 min-w-0 flex-1">
+                <img id="player-album-cover" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><rect width='200' height='200' fill='%2312241C'/><circle cx='145' cy='60' r='70' fill='%23254434' opacity='0.75'/><circle cx='55' cy='150' r='85' fill='%230D1B14' opacity='0.8'/><path d='M25 110 Q60 75 100 110 T175 110' fill='none' stroke='%23E8A317' stroke-width='5' stroke-linecap='round' opacity='0.95'/><path d='M25 130 Q60 95 100 130 T175 130' fill='none' stroke='%23E8A317' stroke-width='3' stroke-linecap='round' opacity='0.5'/></svg>" alt="Pochette" class="w-[60px] h-[60px] rounded-[10px] object-cover border border-[var(--nz-border)] shadow-sm flex-shrink-0 hidden">
+                <div class="min-w-0 flex-1">
+                  <span id="player-style-badge" class="text-[10px] px-2 py-0.5 rounded-[6px] font-bold bg-[var(--nz-accent-soft)] text-[var(--nz-accent)] border border-[var(--nz-border)]">Afrobeat</span>
+                  <h4 id="player-song-title" class="font-bold text-slate-900 dark:text-white text-sm sm:text-base mt-1 truncate">Titre de la chanson</h4>
                 </div>
               </div>
-              <span id="player-time" class="text-xs text-slate-500 dark:text-slate-400 font-mono">0:00 / 3:15</span>
+              <div class="flex items-center gap-2 flex-shrink-0">
+                <span id="player-time" class="text-xs text-slate-500 dark:text-slate-400 font-mono">0:00 / 3:15</span>
+                <button type="button" id="result-card-options-btn" onclick="openMobileCardMenu(window._latestCreatedSongId || (window.userSongs && window.userSongs[0] && window.userSongs[0].id) || '')" class="p-2 rounded-[8px] border border-[var(--nz-border)] hover:bg-[var(--nz-track)] text-[var(--nz-muted)] hover:text-[var(--nz-text)] flex items-center justify-center cursor-pointer flex-shrink-0" title="Options" aria-label="Options">
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+                </button>
+              </div>
             </div>
 
             <div class="h-14 flex items-center justify-between gap-1 my-3 px-2 bg-[var(--nz-bg)]/90 rounded-xl overflow-hidden cursor-pointer" id="waveform-container"></div>
@@ -2264,21 +2269,6 @@
                 </div>
               </div>
             </div>
-          </div>
-
-          <!-- Action Buttons (Partager Réseaux, Vidéo Shorts / YouTube, et Choix du Format de Téléchargement In-App) -->
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            <button onclick="openShareModal(document.getElementById('player-song-title')?.textContent || 'Ma Chanson Nzembo')" class="py-3 px-3 rounded-xl border border-[var(--nz-border)] hover:bg-[var(--nz-track)] text-slate-800 dark:text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors">
-              <svg class="w-4 h-4 text-[var(--nz-accent)] " fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
-              <span>Partager</span>
-            </button>
-            <button onclick="openStudioModal('video', (window.userSongs && window.userSongs[0] && window.userSongs[0].id) ? window.userSongs[0].id : '')" class="py-3 px-3 rounded-xl border border-[var(--nz-border)] bg-[var(--nz-surface)] hover:border-[var(--nz-accent)] text-[var(--nz-text)] font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer">
-              <span>Créer Vidéo MP4</span>
-            </button>
-            <button onclick="downloadCurrentSongAudio('mp3')" class="btn-gradient py-3 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-              <span>Télécharger MP3 HD</span>
-            </button>
           </div>
 
           <div class="text-center pt-2">
@@ -2623,26 +2613,51 @@
         <div class="space-y-4">
           <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
             <div>
-              <div class="flex items-center gap-2">
+              <div class="flex flex-wrap items-center gap-2">
                 <h3 class="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider" id="txt-recharge-title">Achat de Crédits de Création</h3>
-                <span class="text-[10px] px-2 py-0.5 rounded-full bg-[var(--nz-accent-soft)] text-[var(--nz-accent)]   font-extrabold">Offre Unique : 0,80 $ / crédit</span>
+                <span id="credit-offer-badge" class="text-[10px] px-2 py-0.5 rounded-full bg-[var(--nz-accent-soft)] text-[var(--nz-accent)] font-extrabold">Offre Unique : $0.80 / crédit</span>
+                <span id="fx-rate-status-badge" class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold">Taux en temps réel</span>
               </div>
-              <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" id="detected-currency-note">1 crédit = 0,80 $ USD (~2 280 CDF). Sans abonnement : choisis la quantité exacte.</p>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" id="detected-currency-note">1 crédit = $0.80 USD. Conversion automatique en temps réel selon la devise choisie.</p>
             </div>
 
-            <!-- Currency Selector Dropdown (9 African & International Currencies) -->
+            <!-- Currency Selector Dropdown (USD défaut + RDC CDF + Devises SasPay / PayTabs & Mondiales) -->
             <div class="flex items-center gap-2 self-start sm:self-auto">
               <span class="text-xs text-slate-500 dark:text-slate-400 font-medium">Devise :</span>
-              <select id="currency-select" onchange="changeCurrency(this.value)" class="bg-[var(--nz-surface)] text-slate-900 dark:text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-[var(--nz-border)] shadow-sm outline-none cursor-pointer">
+              <select id="currency-select" onchange="changeCurrency(this.value)" class="bg-[var(--nz-surface)] text-slate-900 dark:text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-[var(--nz-border)] shadow-sm outline-none cursor-pointer max-w-[230px]">
                 <option value="USD" selected>USD ($ Dollar américain)</option>
-                <option value="CDF">CDF (Franc Congolais)</option>
+                <option value="CDF">CDF (Franc Congolais - RDC)</option>
                 <option value="EUR">EUR (€ Euro)</option>
-                <option value="XAF">XAF/XOF (Franc CFA)</option>
-                <option value="NGN">NGN (Naira nigérian)</option>
+                <option value="GBP">GBP (£ Livre sterling)</option>
+                <option value="AED">AED (Dirham Émirats - SasPay)</option>
+                <option value="SAR">SAR (Riyal Saoudien - SasPay)</option>
+                <option value="QAR">QAR (Riyal Qatari - SasPay)</option>
+                <option value="BHD">BHD (Dinar Bahreïni - SasPay)</option>
+                <option value="OMR">OMR (Rial Omanais - SasPay)</option>
+                <option value="KWD">KWD (Dinar Koweïtien - SasPay)</option>
+                <option value="JOD">JOD (Dinar Jordanien - SasPay)</option>
+                <option value="IQD">IQD (Dinar Irakien - SasPay)</option>
+                <option value="EGP">EGP (Livre Égyptienne - SasPay)</option>
+                <option value="ILS">ILS (Shekel - SasPay)</option>
+                <option value="XAF">XAF (Franc CFA BEAC)</option>
+                <option value="XOF">XOF (Franc CFA BCEAO)</option>
+                <option value="NGN">NGN (₦ Naira nigérian)</option>
                 <option value="KES">KES (Shilling kényan)</option>
-                <option value="ZAR">ZAR (Rand sud-africain)</option>
-                <option value="GHS">GHS (Cedi ghanéen)</option>
+                <option value="ZAR">ZAR (R Rand sud-africain)</option>
+                <option value="GHS">GHS (GH₵ Cedi ghanéen)</option>
                 <option value="RWF">RWF (Franc rwandais)</option>
+                <option value="UGX">UGX (Shilling ougandais)</option>
+                <option value="TZS">TZS (Shilling tanzanien)</option>
+                <option value="ZMW">ZMW (Kwacha zambien)</option>
+                <option value="MAD">MAD (Dirham marocain)</option>
+                <option value="TND">TND (Dinar tunisien)</option>
+                <option value="DZD">DZD (Dinar algérien)</option>
+                <option value="CAD">CAD (CA$ Dollar canadien)</option>
+                <option value="CHF">CHF (Franc suisse)</option>
+                <option value="AUD">AUD (A$ Dollar australien)</option>
+                <option value="TRY">TRY (₺ Livre turque)</option>
+                <option value="INR">INR (₹ Roupie indienne)</option>
+                <option value="PKR">PKR (Roupie pakistanaise)</option>
               </select>
             </div>
           </div>
@@ -2656,7 +2671,7 @@
                 <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Aucun forfait imposé : tu achètes uniquement ce dont tu as besoin.</p>
               </div>
               <div class="text-left sm:text-right">
-                <span class="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight">0,80 $</span>
+                <span id="credit-unit-price-display" class="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight">$0.80</span>
                 <span class="text-xs font-bold text-[var(--nz-accent)]  block uppercase">/ crédit</span>
               </div>
             </div>
@@ -2693,19 +2708,19 @@
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <button onclick="setQuickCreditsInput(5)" class="quick-qty-btn p-2.5 rounded-xl border border-[var(--nz-border)] hover:border-[var(--nz-accent)] dark:hover:border-[var(--nz-accent)] text-center font-bold text-xs transition-all">
                   <span class="block text-slate-900 dark:text-white">5 Crédits</span>
-                  <span class="text-[11px] text-[var(--nz-accent)]  font-extrabold">$4.00</span>
+                  <span id="quick-qty-price-5" class="text-[11px] text-[var(--nz-accent)] font-extrabold">$4.00</span>
                 </button>
                 <button onclick="setQuickCreditsInput(10)" class="quick-qty-btn p-2.5 rounded-xl border-2 border-[var(--nz-accent)]  bg-[var(--nz-accent-soft)]  text-center font-bold text-xs transition-all">
                   <span class="block text-slate-900 dark:text-white">10 Crédits</span>
-                  <span class="text-[11px] text-[var(--nz-accent)]  font-extrabold">$8.00</span>
+                  <span id="quick-qty-price-10" class="text-[11px] text-[var(--nz-accent)] font-extrabold">$8.00</span>
                 </button>
                 <button onclick="setQuickCreditsInput(25)" class="quick-qty-btn p-2.5 rounded-xl border border-[var(--nz-border)] hover:border-[var(--nz-accent)] dark:hover:border-[var(--nz-accent)] text-center font-bold text-xs transition-all">
                   <span class="block text-slate-900 dark:text-white">25 Crédits</span>
-                  <span class="text-[11px] text-[var(--nz-accent)]  font-extrabold">$20.00</span>
+                  <span id="quick-qty-price-25" class="text-[11px] text-[var(--nz-accent)] font-extrabold">$20.00</span>
                 </button>
                 <button onclick="setQuickCreditsInput(50)" class="quick-qty-btn p-2.5 rounded-xl border border-[var(--nz-border)] hover:border-[var(--nz-accent)] dark:hover:border-[var(--nz-accent)] text-center font-bold text-xs transition-all">
                   <span class="block text-slate-900 dark:text-white">50 Crédits</span>
-                  <span class="text-[11px] text-[var(--nz-accent)]  font-extrabold">$40.00</span>
+                  <span id="quick-qty-price-50" class="text-[11px] text-[var(--nz-accent)] font-extrabold">$40.00</span>
                 </button>
               </div>
             </div>
@@ -3836,18 +3851,179 @@
     let waitingMusicOsc = null;
     let waitingMusicMuted = false;
 
-    // Currency rates relative to USD ($0.80 per credit base)
-    const currencyRates = {
-      USD: { symbol: '$', mult: 1, format: (valUSD) => '$' + valUSD.toFixed(2) },
-      CDF: { symbol: 'CDF', mult: 2850, format: (valUSD) => Math.round(valUSD * 2850).toLocaleString('fr-FR') + ' CDF' },
-      EUR: { symbol: '€', mult: 0.92, format: (valUSD) => (valUSD * 0.92).toFixed(2) + ' €' },
-      XAF: { symbol: 'FCFA', mult: 615, format: (valUSD) => Math.round(valUSD * 615).toLocaleString('fr-FR') + ' FCFA' },
-      NGN: { symbol: '₦', mult: 1550, format: (valUSD) => '₦' + Math.round(valUSD * 1550).toLocaleString('fr-FR') },
-      KES: { symbol: 'KES', mult: 130, format: (valUSD) => Math.round(valUSD * 130).toLocaleString('fr-FR') + ' KES' },
-      ZAR: { symbol: 'R', mult: 18.2, format: (valUSD) => 'R ' + (valUSD * 18.2).toFixed(2) },
-      GHS: { symbol: 'GH₵', mult: 15.5, format: (valUSD) => 'GH₵ ' + (valUSD * 15.5).toFixed(2) },
-      RWF: { symbol: 'RWF', mult: 1350, format: (valUSD) => Math.round(valUSD * 1350).toLocaleString('fr-FR') + ' RWF' }
+    // Live Currency FX rates relative to USD ($0.80 per credit base)
+    const CURRENCY_META = {
+      USD: { symbol: '$', prefix: '$', suffix: '', decimals: 2, defaultRate: 1 },
+      CDF: { symbol: 'CDF', prefix: '', suffix: ' CDF', decimals: 0, defaultRate: 2315 },
+      EUR: { symbol: '€', prefix: '', suffix: ' €', decimals: 2, defaultRate: 0.91 },
+      GBP: { symbol: '£', prefix: '£', suffix: '', decimals: 2, defaultRate: 0.76 },
+      AED: { symbol: 'AED', prefix: '', suffix: ' AED', decimals: 2, defaultRate: 3.67 },
+      SAR: { symbol: 'SAR', prefix: '', suffix: ' SAR', decimals: 2, defaultRate: 3.75 },
+      QAR: { symbol: 'QAR', prefix: '', suffix: ' QAR', decimals: 2, defaultRate: 3.64 },
+      BHD: { symbol: 'BHD', prefix: '', suffix: ' BHD', decimals: 3, defaultRate: 0.376 },
+      OMR: { symbol: 'OMR', prefix: '', suffix: ' OMR', decimals: 3, defaultRate: 0.385 },
+      KWD: { symbol: 'KWD', prefix: '', suffix: ' KWD', decimals: 3, defaultRate: 0.310 },
+      JOD: { symbol: 'JOD', prefix: '', suffix: ' JOD', decimals: 3, defaultRate: 0.709 },
+      IQD: { symbol: 'IQD', prefix: '', suffix: ' IQD', decimals: 0, defaultRate: 1310 },
+      EGP: { symbol: 'EGP', prefix: '', suffix: ' EGP', decimals: 2, defaultRate: 50.0 },
+      ILS: { symbol: '₪', prefix: '₪', suffix: '', decimals: 2, defaultRate: 3.35 },
+      XAF: { symbol: 'FCFA', prefix: '', suffix: ' FCFA', decimals: 0, defaultRate: 598 },
+      XOF: { symbol: 'FCFA', prefix: '', suffix: ' FCFA', decimals: 0, defaultRate: 598 },
+      NGN: { symbol: '₦', prefix: '₦', suffix: '', decimals: 0, defaultRate: 1550 },
+      KES: { symbol: 'KES', prefix: '', suffix: ' KES', decimals: 0, defaultRate: 129 },
+      ZAR: { symbol: 'R', prefix: 'R ', suffix: '', decimals: 2, defaultRate: 17.8 },
+      GHS: { symbol: 'GH₵', prefix: 'GH₵ ', suffix: '', decimals: 2, defaultRate: 14.5 },
+      RWF: { symbol: 'RWF', prefix: '', suffix: ' RWF', decimals: 0, defaultRate: 1400 },
+      UGX: { symbol: 'UGX', prefix: '', suffix: ' UGX', decimals: 0, defaultRate: 3680 },
+      TZS: { symbol: 'TZS', prefix: '', suffix: ' TZS', decimals: 0, defaultRate: 2620 },
+      ZMW: { symbol: 'ZMW', prefix: '', suffix: ' ZMW', decimals: 2, defaultRate: 27.5 },
+      MAD: { symbol: 'MAD', prefix: '', suffix: ' MAD', decimals: 2, defaultRate: 9.8 },
+      TND: { symbol: 'TND', prefix: '', suffix: ' TND', decimals: 3, defaultRate: 3.12 },
+      DZD: { symbol: 'DZD', prefix: '', suffix: ' DZD', decimals: 2, defaultRate: 134 },
+      CAD: { symbol: 'CA$', prefix: 'CA$', suffix: '', decimals: 2, defaultRate: 1.40 },
+      CHF: { symbol: 'CHF', prefix: '', suffix: ' CHF', decimals: 2, defaultRate: 0.88 },
+      AUD: { symbol: 'A$', prefix: 'A$', suffix: '', decimals: 2, defaultRate: 1.54 },
+      TRY: { symbol: '₺', prefix: '₺', suffix: '', decimals: 2, defaultRate: 35.0 },
+      INR: { symbol: '₹', prefix: '₹', suffix: '', decimals: 0, defaultRate: 84.5 },
+      PKR: { symbol: 'PKR', prefix: '', suffix: ' PKR', decimals: 0, defaultRate: 278 }
     };
+
+    function formatAmountInCurrency(valUSD, code) {
+      const upper = String(code || 'USD').toUpperCase();
+      const entry = currencyRates[upper] || currencyRates.USD;
+      const meta = CURRENCY_META[upper] || CURRENCY_META.USD;
+      const converted = (Number(valUSD) || 0) * (Number(entry.mult) || 1);
+      if (meta.decimals === 0) {
+        return `${meta.prefix}${Math.round(converted).toLocaleString('fr-FR')}${meta.suffix}`;
+      }
+      const fixedStr = converted.toFixed(meta.decimals);
+      return `${meta.prefix}${fixedStr}${meta.suffix}`;
+    }
+
+    const currencyRates = {};
+    Object.keys(CURRENCY_META).forEach(code => {
+      const m = CURRENCY_META[code];
+      currencyRates[code] = {
+        symbol: m.symbol,
+        mult: m.defaultRate,
+        decimals: m.decimals,
+        format: (valUSD) => formatAmountInCurrency(valUSD, code)
+      };
+    });
+
+    let fxRatesState = { source: 'fallback', updatedAt: null, isLive: false };
+    let fxFetchPromise = null;
+
+    function updateAllCurrencyDisplays() {
+      const code = CURRENCY_META[currentCurrency] ? currentCurrency : 'USD';
+      const entry = currencyRates[code] || currencyRates.USD;
+      const selEl = document.getElementById('currency-select');
+      if (selEl && selEl.value !== code) selEl.value = code;
+
+      const unitFmt = entry.format(0.80);
+      const unitDisplay = document.getElementById('credit-unit-price-display');
+      if (unitDisplay) unitDisplay.textContent = unitFmt;
+
+      const offerBadge = document.getElementById('credit-offer-badge');
+      if (offerBadge) offerBadge.textContent = `Offre Unique : ${unitFmt} / crédit`;
+
+      const statusBadge = document.getElementById('fx-rate-status-badge');
+      if (statusBadge) {
+        statusBadge.textContent = fxRatesState.isLive
+          ? 'Taux de change en temps réel'
+          : 'Taux indicatif';
+      }
+
+      const noteEl = document.getElementById('detected-currency-note');
+      if (noteEl) {
+        const cdfEntry = currencyRates.CDF;
+        if (code === 'USD') {
+          const cdfCredit = cdfEntry ? cdfEntry.format(0.80) : '';
+          noteEl.textContent = cdfCredit
+            ? `1 crédit = $0.80 USD (~${cdfCredit} au taux réel). Sans abonnement : choisis la quantité exacte.`
+            : `1 crédit = $0.80 USD. Sans abonnement : choisis la quantité exacte.`;
+        } else {
+          noteEl.textContent = `1 crédit = $0.80 USD (soit ${unitFmt} au taux réel : 1 USD = ${entry.mult >= 10 ? Math.round(entry.mult).toLocaleString('fr-FR') : Number(entry.mult).toFixed(entry.decimals >= 3 ? 3 : 2)} ${code}).`;
+        }
+      }
+
+      [5, 10, 25, 50].forEach(q => {
+        const el = document.getElementById(`quick-qty-price-${q}`);
+        if (el) el.textContent = entry.format(+(q * 0.80).toFixed(2));
+      });
+
+      if (typeof updateCustomCreditPrice === 'function') updateCustomCreditPrice();
+      if (typeof updateProfileCustomCreditPrice === 'function') updateProfileCustomCreditPrice();
+    }
+
+    async function fetchLiveCurrencyRates(force = false) {
+      if (!force && fxFetchPromise) return fxFetchPromise;
+      const now = Date.now();
+      if (!force && fxRatesState.isLive && fxRatesState.fetchedAt && (now - fxRatesState.fetchedAt) < 5 * 60 * 1000) {
+        return fxRatesState;
+      }
+
+      fxFetchPromise = (async () => {
+        try {
+          const backendUrl = (typeof getNzemboBackendBase === 'function') ? getNzemboBackendBase() : '';
+          const endpoint = `${backendUrl}/api/fx/rates`;
+          const res = await fetch(endpoint);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.rates && typeof data.rates === 'object') {
+              Object.keys(data.rates).forEach(code => {
+                const upper = String(code).toUpperCase();
+                const num = Number(data.rates[code]);
+                if (currencyRates[upper] && Number.isFinite(num) && num > 0) {
+                  currencyRates[upper].mult = num;
+                }
+              });
+              fxRatesState = {
+                source: data.source || 'live',
+                updatedAt: data.updatedAt || null,
+                fetchedAt: Date.now(),
+                isLive: !String(data.source || '').includes('fallback')
+              };
+              updateAllCurrencyDisplays();
+              return fxRatesState;
+            }
+          }
+        } catch (e) {}
+
+        // Fallback direct API publique si backend indisponible
+        try {
+          const res2 = await fetch('https://open.er-api.com/v6/latest/USD');
+          if (res2.ok) {
+            const d2 = await res2.json();
+            if (d2 && d2.rates) {
+              Object.keys(CURRENCY_META).forEach(code => {
+                const num = Number(d2.rates[code]);
+                if (Number.isFinite(num) && num > 0) {
+                  currencyRates[code].mult = num;
+                }
+              });
+              fxRatesState = {
+                source: 'open.er-api.com',
+                updatedAt: d2.time_last_update_utc || null,
+                fetchedAt: Date.now(),
+                isLive: true
+              };
+              updateAllCurrencyDisplays();
+              return fxRatesState;
+            }
+          }
+        } catch (e2) {}
+
+        updateAllCurrencyDisplays();
+        return fxRatesState;
+      })();
+
+      try {
+        return await fxFetchPromise;
+      } finally {
+        fxFetchPromise = null;
+      }
+    }
 
     const basePricesCDF = {
       decouverte: 2000,
@@ -5232,10 +5408,21 @@
 
     // ================= CURRENCY MANAGEMENT =================
     function changeCurrency(curr) {
-      currentCurrency = curr;
-      updateCustomCreditPrice();
-      updateProfileCustomCreditPrice();
-      triggerToast(`Devise modifiée : ${curr}`, 'info');
+      const code = String(curr || 'USD').toUpperCase();
+      currentCurrency = CURRENCY_META[code] ? code : 'USD';
+      try {
+        localStorage.setItem('nzembo_selected_currency', currentCurrency);
+      } catch (e) {}
+      if (typeof updateAllCurrencyDisplays === 'function') {
+        updateAllCurrencyDisplays();
+      } else {
+        updateCustomCreditPrice();
+        updateProfileCustomCreditPrice();
+      }
+      if (typeof fetchLiveCurrencyRates === 'function') {
+        fetchLiveCurrencyRates(false);
+      }
+      triggerToast(`Devise modifiée : ${currentCurrency}`, 'info');
     }
 
     async function applyPromoCode() {
@@ -5492,9 +5679,28 @@
       `).join('');
     }
 
+    function getCurrentUserReferralLink() {
+      try {
+        const cu = (window.NzemboBackend && typeof window.NzemboBackend.getCurrentUser === 'function')
+          ? window.NzemboBackend.getCurrentUser()
+          : null;
+        if (cu && cu.referral_code && !String(cu.referral_code).includes('NZ-84920')) {
+          return `https://nzembo.net/invite/${String(cu.referral_code).trim().toUpperCase()}`;
+        }
+        const store = (window.NzemboStore && typeof window.NzemboStore.get === 'function') ? window.NzemboStore.get() : null;
+        if (store && store.userAccount && store.userAccount.referralLink && !String(store.userAccount.referralLink).includes('NZ-84920')) {
+          return store.userAccount.referralLink;
+        }
+        const input = document.getElementById('referral-link-input');
+        if (input && input.value && !String(input.value).includes('NZ-84920')) {
+          return input.value.trim();
+        }
+      } catch (e) {}
+      return 'https://nzembo.net';
+    }
+
     function shareReferralNetwork(network) {
-      const store = window.NzemboStore ? window.NzemboStore.get() : null;
-      const refLink = store ? store.userAccount.referralLink : 'https://nzembo.net/invite/NZ-84920';
+      const refLink = getCurrentUserReferralLink();
       const text = encodeURIComponent(`Crée ta propre chanson personnalisée en Lingala, Rumba ou Afrobeat avec l'IA sur Nzembo ! Utilise mon lien d'invitation : ${refLink}`);
 
       if (network === 'whatsapp') {
@@ -5750,12 +5956,12 @@
       }
       document.getElementById('current-view-badge').textContent = badgeTitles[tabId] || 'Nzembo';
 
-      // Ne restaurer ou réinitialiser le wizard que s'il n'y a pas de création active ou de brouillon en cours
+      // Ne restaurer ou réinitialiser le wizard que s'il n'y a pas de création active ou d'action utilisateur explicite
       if (tabId === 'create' && !window._nzemboInitialLoad) {
         const hasDraft = localStorage.getItem('nzembo_wizard_form_draft');
-        if (hasDraft && typeof restoreWizardFormDraft === 'function') {
+        if (hasDraft && !window._userExplicitStylePick && typeof restoreWizardFormDraft === 'function') {
           restoreWizardFormDraft();
-        } else {
+        } else if (!window._userExplicitStylePick) {
           currentWizardStep = 1;
           if (typeof updateWizardUI === 'function') updateWizardUI();
         }
@@ -5803,6 +6009,10 @@
       if (tabId === 'explorer') {
         renderCommunityFeed();
         if (typeof syncExplorerCommunityFromBackend === 'function') syncExplorerCommunityFromBackend();
+      }
+      if (tabId === 'credits' || tabId === 'profile') {
+        if (typeof updateAllCurrencyDisplays === 'function') updateAllCurrencyDisplays();
+        if (typeof fetchLiveCurrencyRates === 'function') fetchLiveCurrencyRates(false);
       }
     }
 
@@ -5953,6 +6163,7 @@
 
     function selectStyle(id) {
       selectedStyle = id === 'rumba' ? 'rumba_congolaise' : id;
+      window._userExplicitStylePick = true;
       try {
         localStorage.setItem('nzembo_selected_style', selectedStyle);
       } catch (e) {}
@@ -6185,10 +6396,10 @@
     }
 
     function updateVoiceSelections() {
-      const gEl = document.getElementById('select-voice-gender');
-      const tEl = document.getElementById('select-singer-register');
-      if (gEl) selectedVoiceGender = gEl.value;
-      if (tEl) selectedVoiceTimbre = tEl.value;
+      const gEl = document.getElementById('select-voice-gender') || document.getElementById('select-vocal-gender');
+      const tEl = document.getElementById('select-singer-register') || document.getElementById('select-vocal-register');
+      if (gEl && gEl.value) selectedVoiceGender = gEl.value;
+      if (tEl && tEl.value) selectedVoiceTimbre = tEl.value;
     }
 
     async function checkAudioFileDuration(file) {
@@ -6614,6 +6825,8 @@
       if (progressBox) progressBox.classList.remove('hidden');
 
       try {
+        // Garanti le passage strict en mode upload dès sélection de photo personnalisée
+        if (typeof selectCoverOption === 'function') selectCoverOption('upload');
         // 3. Recadrage centré carré (1:1) automatique
         const cropped = await cropImageToSquare(file);
         coverFile = cropped.blob || file;
@@ -8776,8 +8989,12 @@
         const secondaryLangRaw = (secondaryLangEl && secondaryLangEl.value) ? (secondaryLangEl.value || secondaryLangEl.options[secondaryLangEl.selectedIndex]?.text || '').trim() : '';
         const secondaryLang = (secondaryLangRaw && secondaryLangRaw.toLowerCase() !== primaryLang.toLowerCase()) ? secondaryLangRaw : null;
         
-        let vocalGenderVal = selectedVoiceGender || (voiceGenderEl ? voiceGenderEl.value : 'Voix Féminine');
-        let vocalRegisterVal = selectedVoiceTimbre || (voiceRegisterEl ? voiceRegisterEl.value : 'Voix Naturelle Polyvalente');
+        let vocalGenderVal = (voiceGenderEl && voiceGenderEl.value) ? voiceGenderEl.value : (selectedVoiceGender || 'Voix Féminine');
+        let vocalRegisterVal = (voiceRegisterEl && voiceRegisterEl.value) ? voiceRegisterEl.value : (selectedVoiceTimbre || 'Naturel et polyvalent');
+        selectedVoiceGender = vocalGenderVal;
+        selectedVoiceTimbre = vocalRegisterVal;
+        const isCustomUploadCover = Boolean(selectedCoverMode === 'upload' && (customCoverCdnUrl || customCoverDataUrl));
+        const customUploadedCoverUrl = isCustomUploadCover ? (customCoverCdnUrl || customCoverDataUrl) : '';
         
         let activePersonaId = null;
         if (voiceOptionActive === 'B') {
@@ -8856,15 +9073,7 @@
           validatedLyrics = (lyricsTextarea && lyricsTextarea.value.trim()) 
             ? lyricsTextarea.value.trim() 
             : (generatedLyrics || generatePlaceholderLyrics(selectedOccasion, selectedStyle, recipient, userMessage, primaryLang, relationship, secondaryLang || '', keywords));
-
-          // Injection de l'en-tête de langue officiel en mode personnalisé
-          const isBilingual = Boolean(secondaryLang);
-          const langHeader = isBilingual
-            ? `[Language: ${primaryLang} & ${secondaryLang} Bilingual]\n`
-            : `[Language: ${primaryLang} ONLY (100% Monolingual)]\n`;
-          if (!validatedLyrics.startsWith('[Language:')) {
-            validatedLyrics = langHeader + validatedLyrics;
-          }
+          validatedLyrics = validatedLyrics.replace(/^\s*\[Language:[^\]]*\]\s*/i, '').trim();
         }
 
         // Récupération STRICTE du titre personnalisé (sans inventer de nom par défaut)
@@ -8907,13 +9116,18 @@
             console.log(' [startSongGeneration] Envoi de la requête studio via NzemboBackend...');
             const genResult = await window.NzemboBackend.generateMusic({
               prompt: fullPrompt,
-              style: styleTags,
-              tags: styleTags,
+              styleId: effSty.id,
+              styleName: styleName,
+              style: styleName,
+              voiceGenderLabel: vocalGenderVal,
+              timbre: vocalRegisterVal,
               language: primaryLang,
               secondaryLanguage: secondaryLang,
               occasion: occasionName,
               recipient: recipient,
               relationship: relationship,
+              story: userMessage,
+              keywords: keywords,
               lyrics: validatedLyrics,
               gender: apiGender,
               personaId: activePersonaId || '',
@@ -8925,7 +9139,9 @@
               customMode: true,
               count: 1,
               title: validatedTitle,
-              styleConfig: styleCfg
+              styleConfig: styleCfg,
+              isCustomCover: isCustomUploadCover,
+              customCoverUrl: customUploadedCoverUrl
             });
 
             taskId = genResult.taskId;
@@ -8945,8 +9161,8 @@
             }
 
             // ── INSTANT REGISTRATION: Enregistrer immédiatement la création dans « Mes créations » avec statut En cours
-            const pendingCover = (selectedCoverMode === 'upload' && customCoverDataUrl) 
-              ? customCoverDataUrl 
+            const pendingCover = isCustomUploadCover
+              ? customUploadedCoverUrl
               : (typeof getDefaultSongCover === 'function' ? getDefaultSongCover(styleName, selectedOccasion) : '');
 
             const pendingSongObj = {
@@ -8964,6 +9180,18 @@
               audioUrl: '',
               audioUrl2: null,
               albumCover: pendingCover,
+              coverUrl: pendingCover,
+              isCustomUploadedCover: isCustomUploadCover,
+              customCoverUrl: customUploadedCoverUrl,
+              metadata: {
+                styleId: effSty.id,
+                language: primaryLang,
+                secondaryLanguage: secondaryLang || '',
+                voiceGenderLabel: vocalGenderVal,
+                timbre: vocalRegisterVal,
+                isCustomUploadedCover: isCustomUploadCover,
+                customCoverUrl: customUploadedCoverUrl
+              },
               isProcessing: true,
               date: "À l'instant",
               createdAt: new Date().toISOString()
@@ -9078,11 +9306,11 @@
                 currentAudioTrackUrl = statusData.audioUrl;
                 currentAudioTrackUrl2 = statusData.audioUrl2;
 
-                let finalCoverToUse = (selectedCoverMode === 'upload' && (customCoverCdnUrl || customCoverDataUrl)) 
-                  ? (customCoverCdnUrl || customCoverDataUrl) 
+                let finalCoverToUse = isCustomUploadCover
+                  ? customUploadedCoverUrl
                   : statusData.albumCover;
 
-                if (selectedCoverMode === 'ai' || (!customCoverCdnUrl && !customCoverDataUrl)) {
+                if (!isCustomUploadCover && selectedCoverMode !== 'upload') {
                   try {
                     // Construction d'un prompt d'image riche et contextualisé basé sur l'occasion, le style, l'histoire et les paroles
                     const storySummary = (userMessage || '').slice(0, 160).replace(/\n/g, ' ');
@@ -9175,8 +9403,20 @@
       styleName = styleName || 'R&B Slow';
       const songTitle = realTitle || generateDefaultSongTitle(selectedOccasion, recipient, styleName, desc, kwVal);
 
-      // Pochette par défaut adaptée si l'API n'a pas renvoyé de pochette
-      const finalCover = albumCover || (typeof getDefaultSongCover === 'function' ? getDefaultSongCover(styleName, selectedOccasion) : '');
+      const existingSongIdx = userSongs.findIndex(s => (engineTaskId && s.taskId === engineTaskId) || (songId && s.id === songId));
+      const existingSongObj = existingSongIdx !== -1 ? userSongs[existingSongIdx] : null;
+      const keepCustomCover = Boolean(
+        (existingSongObj && (existingSongObj.isCustomUploadedCover || (existingSongObj.metadata && existingSongObj.metadata.isCustomUploadedCover))) ||
+        (selectedCoverMode === 'upload' && (customCoverCdnUrl || customCoverDataUrl))
+      );
+      const preservedCustomCover = keepCustomCover
+        ? ((existingSongObj && (existingSongObj.customCoverUrl || existingSongObj.albumCover)) || customCoverCdnUrl || customCoverDataUrl || albumCover)
+        : '';
+
+      // Pochette par défaut adaptée si l'API n'a pas renvoyé de pochette (sans jamais écraser une photo importée)
+      const finalCover = keepCustomCover
+        ? (preservedCustomCover || albumCover || (typeof getDefaultSongCover === 'function' ? getDefaultSongCover(styleName, selectedOccasion) : ''))
+        : (albumCover || (typeof getDefaultSongCover === 'function' ? getDefaultSongCover(styleName, selectedOccasion) : ''));
 
       currentAudioTrackUrl = audioUrl;
       currentAudioTrackUrl2 = null;
@@ -9219,7 +9459,6 @@
       document.getElementById('result-lyrics').textContent = finalLyrics;
       document.getElementById('lyrics-edit-textarea').value = finalLyrics;
 
-      const existingSongIdx = userSongs.findIndex(s => (engineTaskId && s.taskId === engineTaskId) || (songId && s.id === songId));
       const finishedSongObj = {
         id: songId || (existingSongIdx !== -1 ? userSongs[existingSongIdx].id : ('nz-' + Date.now())),
         taskId: engineTaskId || '',
@@ -9231,13 +9470,22 @@
         recipient: recipient,
         occasion: selectedOccasion,
         lyrics: finalLyrics,
-        prompt: promptInput || desc || '',
+        prompt: (existingSongObj && existingSongObj.prompt) || desc || '',
         audioUrl: audioUrl,
         audioUrl2: null,
         albumCover: finalCover,
+        coverUrl: finalCover,
+        isCustomUploadedCover: keepCustomCover,
+        customCoverUrl: keepCustomCover ? finalCover : '',
+        metadata: {
+          ...(existingSongObj && existingSongObj.metadata ? existingSongObj.metadata : {}),
+          isCustomUploadedCover: keepCustomCover,
+          customCoverUrl: keepCustomCover ? finalCover : ''
+        },
         isProcessing: false,
         date: 'À l\'instant'
       };
+      window._latestCreatedSongId = finishedSongObj.id;
 
       if (existingSongIdx !== -1) {
         userSongs[existingSongIdx] = finishedSongObj;
@@ -9419,8 +9667,13 @@
       const secondaryLang = (secondaryLangRaw && secondaryLangRaw.toLowerCase() !== primaryLang.toLowerCase()) ? secondaryLangRaw : null;
 
       const vocalGenderEl = document.getElementById('select-vocal-gender') || document.getElementById('select-voice-gender');
-      let apiGender = (vocalGenderEl?.value === 'male' || vocalGenderEl?.value === 'lead_male' || (vocalGenderEl?.value || '').toLowerCase().includes('masculin')) ? 'male' : 'female';
-      const isInstrumental = (vocalGenderEl?.value || '').toLowerCase().includes('instrumental');
+      const vocalRegisterEl = document.getElementById('select-singer-register') || document.getElementById('select-vocal-register');
+      const vocalGenderVal2 = (vocalGenderEl && vocalGenderEl.value) ? vocalGenderEl.value : (selectedVoiceGender || 'Voix Féminine');
+      const vocalRegisterVal2 = (vocalRegisterEl && vocalRegisterEl.value) ? vocalRegisterEl.value : (selectedVoiceTimbre || 'Naturel et polyvalent');
+      let apiGender = (vocalGenderVal2 === 'male' || vocalGenderVal2 === 'lead_male' || vocalGenderVal2.toLowerCase().includes('masculin')) ? 'male' : 'female';
+      const isInstrumental = vocalGenderVal2.toLowerCase().includes('instrumental');
+      const isCustomUploadCover2 = Boolean(selectedCoverMode === 'upload' && (customCoverCdnUrl || customCoverDataUrl));
+      const customUploadedCoverUrl2 = isCustomUploadCover2 ? (customCoverCdnUrl || customCoverDataUrl) : '';
 
       const styleId = selectedStyle || 'rumba_congolaise';
       const styleCfg = (typeof getMusicStyleConfig === 'function') ? getMusicStyleConfig(selectedStyle || styleName) : null;
@@ -9461,16 +9714,24 @@
         if (window.NzemboBackend && window.NzemboBackend.generateMusic) {
           const genResult = await window.NzemboBackend.generateMusic({
             prompt: fullPrompt,
+            styleId: effSty.id,
+            styleName: styleName,
             style: styleName,
+            voiceGenderLabel: vocalGenderVal2,
+            timbre: vocalRegisterVal2,
             language: primaryLang,
             secondaryLanguage: secondaryLang,
             occasion: occasionName,
             recipient: recipient,
-            lyrics: lyricsText,
+            story: desc,
+            keywords: kwVal,
+            lyrics: String(lyricsText || '').replace(/^\s*\[Language:[^\]]*\]\s*/i, '').trim(),
             gender: apiGender,
             isInstrumental: isInstrumental,
             title: computedTitle,
-            styleConfig: styleCfg
+            styleConfig: styleCfg,
+            isCustomCover: isCustomUploadCover2,
+            customCoverUrl: customUploadedCoverUrl2
           });
           taskId = genResult.taskId;
           songId = genResult.songId;
@@ -9484,8 +9745,8 @@
           }
 
           // Enregistrement immédiat dans Mes créations
-          const pendingCover2 = (selectedCoverMode === 'upload' && customCoverDataUrl) 
-            ? customCoverDataUrl 
+          const pendingCover2 = isCustomUploadCover2
+            ? customUploadedCoverUrl2
             : (typeof getDefaultSongCover === 'function' ? getDefaultSongCover(styleName, selectedOccasion) : '');
 
           const pendingSongObj2 = {
@@ -9503,6 +9764,18 @@
             audioUrl: '',
             audioUrl2: null,
             albumCover: pendingCover2,
+            coverUrl: pendingCover2,
+            isCustomUploadedCover: isCustomUploadCover2,
+            customCoverUrl: customUploadedCoverUrl2,
+            metadata: {
+              styleId: effSty.id,
+              language: primaryLang,
+              secondaryLanguage: secondaryLang || '',
+              voiceGenderLabel: vocalGenderVal2,
+              timbre: vocalRegisterVal2,
+              isCustomUploadedCover: isCustomUploadCover2,
+              customCoverUrl: customUploadedCoverUrl2
+            },
             isProcessing: true,
             date: "À l'instant",
             createdAt: new Date().toISOString()
@@ -9565,11 +9838,11 @@
               } else {
                 updateCreditDisplays();
               }
-              let finalLyricsCover = (selectedCoverMode === 'upload' && (customCoverCdnUrl || customCoverDataUrl)) 
-                  ? (customCoverCdnUrl || customCoverDataUrl) 
+              let finalLyricsCover = isCustomUploadCover2
+                  ? customUploadedCoverUrl2
                   : st.albumCover;
 
-                if (selectedCoverMode === 'ai' || (!customCoverCdnUrl && !customCoverDataUrl)) {
+                if (!isCustomUploadCover2 && selectedCoverMode !== 'upload') {
                   try {
                     const storySummary = (desc || '').slice(0, 160).replace(/\n/g, ' ');
                     const lyricsExcerpt = (lyricsText || '').slice(0, 140).replace(/\n/g, ' ');
@@ -11552,8 +11825,9 @@
             selectedOccasion = draft.occasion;
             if (typeof renderOccasions === 'function') renderOccasions();
           }
-          if (draft.style) {
+          if (draft.style && !window._userExplicitStylePick) {
             selectedStyle = draft.style;
+            try { localStorage.setItem('nzembo_selected_style', selectedStyle); } catch (e) {}
             if (typeof renderStyles === 'function') renderStyles();
           }
           if (draft.recipient && document.getElementById('input-recipient')) {
@@ -11651,7 +11925,10 @@
                   target.isProcessing = false;
                   target.audioUrl = statusData.audioUrl;
                   target.audioUrl2 = statusData.audioUrl2 || null;
-                  target.albumCover = statusData.albumCover || target.albumCover || (typeof getDefaultSongCover === 'function' ? getDefaultSongCover(styleName) : '');
+                  const keepCustom = Boolean(target._customCoverUpdated || target.isCustomUploadedCover || (target.metadata && target.metadata.isCustomUploadedCover));
+                  target.albumCover = keepCustom
+                    ? (target.customCoverUrl || target.albumCover)
+                    : (statusData.albumCover || target.albumCover || (typeof getDefaultSongCover === 'function' ? getDefaultSongCover(styleName) : ''));
                   target.coverUrl = target.albumCover;
                   target.lyrics = statusData.lyrics || target.lyrics || lyricsText || '';
                   if (statusData.title) target.title = statusData.title;
@@ -11689,7 +11966,8 @@
                       stTarget.isProcessing = false;
                       stTarget.audioUrl = statusData.audioUrl;
                       stTarget.audioUrl2 = statusData.audioUrl2 || null;
-                      stTarget.albumCover = statusData.albumCover || stTarget.albumCover;
+                      const keepStCustom = Boolean(stTarget._customCoverUpdated || stTarget.isCustomUploadedCover || (stTarget.metadata && stTarget.metadata.isCustomUploadedCover));
+                      stTarget.albumCover = keepStCustom ? (stTarget.customCoverUrl || stTarget.albumCover) : (statusData.albumCover || stTarget.albumCover);
                     }
                     window.NzemboStore.save(sData);
                   }
@@ -13596,6 +13874,7 @@
 
     function resetWizard() {
       currentWizardStep = 1;
+      window._userExplicitStylePick = false;
       document.getElementById('wizard-nav-buttons').classList.remove('hidden');
       document.getElementById('wizard-progress-header').classList.remove('hidden');
       document.getElementById('input-recipient').value = '';
@@ -14202,9 +14481,9 @@
       return `${baseUrl}?${params.toString()}#songs`;
     }
 
-    function openShareModal(songTitle, audioUrl) {
+    function openShareModal(songTitle, audioUrl, explicitUrl) {
       currentShareSong = songTitle || 'Chanson Nzembo';
-      currentShareAudioUrl = audioUrl || currentAudioTrackUrl || '';
+      currentShareAudioUrl = explicitUrl || audioUrl || currentAudioTrackUrl || '';
       const lbl = document.getElementById('share-song-title-label');
       if (lbl) lbl.textContent = `Partager « ${currentShareSong} » :`;
       const modal = document.getElementById('share-modal');
@@ -14347,7 +14626,8 @@
     }
 
     function shareReferralWhatsApp() {
-      const text = encodeURIComponent(`Rejoins-moi sur Nzembo pour créer ta propre chanson ! Utilise mon lien pour recevoir un crédit offert : https://nzembo.net/invite/NZ-84920`);
+      const refLink = (typeof getCurrentUserReferralLink === 'function') ? getCurrentUserReferralLink() : 'https://nzembo.net';
+      const text = encodeURIComponent(`Rejoins-moi sur Nzembo pour créer ta propre chanson ! Utilise mon lien pour recevoir un crédit offert : ${refLink}`);
       window.open(`https://wa.me/?text=${text}`, '_blank');
     }
 
@@ -14462,10 +14742,10 @@
               </div>
             </div>
           </div>
-          ${(dlMedia && !s.isProcessing) ? `
-          <a href="${escapeHtmlAttr(dlMedia)}" download="${escapeHtmlAttr((s.title || 'nzembo') + dlExt)}" onclick="event.stopPropagation()" class="p-2 rounded-[8px] border border-[var(--nz-border)] text-[var(--nz-muted)] hover:text-[var(--nz-text)] hover:bg-[var(--nz-track)] flex-shrink-0 transition-colors" title="Télécharger" aria-label="Télécharger">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          </a>` : ''}
+          ${!s.isProcessing ? `
+          <button type="button" onclick="event.stopPropagation(); openMobileCardMenu('${escapedSongId}')" class="p-2 rounded-[8px] border border-[var(--nz-border)] hover:bg-[var(--nz-track)] text-[var(--nz-muted)] hover:text-[var(--nz-text)] flex items-center justify-center cursor-pointer flex-shrink-0 transition-colors" title="${isEn ? 'Options' : 'Options'}" aria-label="Options">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+          </button>` : ''}
         </div>`;
       }).join('');
     }
@@ -14820,10 +15100,7 @@
                   </div>
                 </div>
                 <div class="flex items-center gap-1.5 flex-shrink-0">
-                  <a href="${escapeHtmlAttr(covSrc)}" download="${escapeHtmlAttr((covTitle || 'pochette') + '.png')}" onclick="event.stopPropagation()" class="p-2 rounded-[8px] border border-[var(--nz-border)] hover:bg-[var(--nz-track)] text-[var(--nz-muted)] hover:text-[var(--nz-text)] flex items-center justify-center transition-colors" title="${isEn ? 'Download' : 'Télécharger'}">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  </a>
-                  <button type="button" onclick="event.stopPropagation(); openMobileCardMenu('${escapeHtmlAttr(itemId)}')" class="p-2 rounded-[8px] border border-[var(--nz-border)] hover:bg-[var(--nz-track)] text-[var(--nz-muted)] hover:text-[var(--nz-text)] flex items-center justify-center cursor-pointer" title="${isEn ? 'Options' : 'Options'}">
+                  <button type="button" onclick="event.stopPropagation(); openMobileCardMenu('${escapeHtmlAttr(itemId)}')" class="p-2 rounded-[8px] border border-[var(--nz-border)] hover:bg-[var(--nz-track)] text-[var(--nz-muted)] hover:text-[var(--nz-text)] flex items-center justify-center cursor-pointer" title="${isEn ? 'Options' : 'Options'}" aria-label="Options">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
                   </button>
                 </div>
@@ -14947,39 +15224,15 @@
                   ` : '')}
                 </div>
 
-                <!-- Droite : Bouton Télécharger + Menu 3 points -->
+                <!-- Droite : Bouton Menu 3 points uniquement (téléchargement, paroles, partager, supprimer dans le menu) -->
                 ${!s.isProcessing ? `
-                <div class="flex items-center gap-1.5 flex-shrink-0">
-                  ${(mainAudio || videoSrc) ? `
-                  <a href="${escapeHtmlAttr(videoSrc || mainAudio)}" download="${escapeHtmlAttr((title || 'nzembo') + (isVideoCard ? '.mp4' : '.mp3'))}" onclick="event.stopPropagation()" class="p-2 rounded-[8px] border border-[var(--nz-border)] hover:bg-[var(--nz-track)] text-[var(--nz-muted)] hover:text-[var(--nz-text)] flex items-center justify-center transition-colors" title="${isEn ? 'Download' : 'Télécharger'}" aria-label="Télécharger">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  </a>
-                  ` : ''}
+                <div class="flex items-center flex-shrink-0">
                   <button type="button" onclick="event.stopPropagation(); openMobileCardMenu('${escapeHtmlAttr(itemId)}')" class="p-2 rounded-[8px] border border-[var(--nz-border)] hover:bg-[var(--nz-track)] text-[var(--nz-muted)] hover:text-[var(--nz-text)] flex items-center justify-center cursor-pointer" title="${isEn ? 'Options' : 'Options'}" aria-label="Options">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
                   </button>
                 </div>
                 ` : ''}
               </div>
-
-              ${!s.isProcessing ? `
-              <div class="flex items-center justify-between gap-2 pt-2 border-t border-[var(--nz-border)] text-[11px]">
-                <div class="flex items-center gap-1.5 sm:gap-2">
-                  <button type="button" onclick="event.stopPropagation(); openLyricsReaderModal('${escapeHtmlAttr(itemId)}')" class="px-2.5 py-1 rounded-[8px] text-[var(--nz-muted)] hover:text-[var(--nz-text)] hover:bg-[var(--nz-track)] font-medium inline-flex items-center gap-1 transition-colors cursor-pointer">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                    <span>Lyrics</span>
-                  </button>
-                  <button type="button" onclick="event.stopPropagation(); openShareModal('${safeTitleJs}')" class="px-2.5 py-1 rounded-[8px] text-[var(--nz-muted)] hover:text-[var(--nz-text)] hover:bg-[var(--nz-track)] font-medium inline-flex items-center gap-1 transition-colors cursor-pointer">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-                    <span>${isEn ? 'Share' : 'Partager'}</span>
-                  </button>
-                </div>
-                <button type="button" onclick="event.stopPropagation(); deleteSongCreation('${escapeHtmlAttr(itemId)}', false)" class="px-2.5 py-1 rounded-[8px] text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 font-medium inline-flex items-center gap-1 transition-colors cursor-pointer">
-                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                  <span>${isEn ? 'Delete' : 'Supprimer'}</span>
-                </button>
-              </div>
-              ` : ''}
 
               ${hasTwoVersions && !s.isProcessing ? `
               <div class="flex items-center gap-1.5 sm:gap-2 pt-0.5 text-[10px] sm:text-[11px]">
@@ -15093,6 +15346,29 @@
       return getLikedSongsSet().has(songId);
     }
 
+    function getFavoriteSongsStorageKey() {
+      try {
+        const cu = (window.NzemboBackend && typeof window.NzemboBackend.getCurrentUser === 'function')
+          ? window.NzemboBackend.getCurrentUser()
+          : null;
+        if (cu && cu.id) return `nzembo_favorite_songs_${String(cu.id)}`;
+      } catch (e) {}
+      return 'nzembo_favorite_songs';
+    }
+
+    function getFavoriteSongsSet() {
+      try {
+        const raw = localStorage.getItem(getFavoriteSongsStorageKey());
+        return new Set((raw ? JSON.parse(raw) : []).map(x => String(x)));
+      } catch (e) {
+        return new Set();
+      }
+    }
+
+    function isSongFavoritedByUser(songId) {
+      return getFavoriteSongsSet().has(String(songId));
+    }
+
     function toggleExplorerMasterMute() {
       explorerMasterMuted = !explorerMasterMuted;
       const icon = document.getElementById('explorer-mute-icon');
@@ -15135,10 +15411,11 @@
       if (!container) return;
 
       const likedSet = getLikedSongsSet();
+      const favoriteSet = getFavoriteSongsSet();
 
       let baseList = Array.isArray(communitySongs) ? communitySongs : [];
       if (activeExplorerFilter === 'favorites') {
-        baseList = baseList.filter(s => s && likedSet.has(s.id));
+        baseList = baseList.filter(s => s && favoriteSet.has(String(s.id)));
       } else if (activeExplorerFilter !== 'all') {
         const filterLower = activeExplorerFilter.toLowerCase();
         baseList = baseList.filter(s => s && ((s.style && s.style.toLowerCase().includes(filterLower)) || (s.styleKey && s.styleKey.toLowerCase() === filterLower)));
@@ -15149,14 +15426,15 @@
 
       const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
       if (filtered.length === 0) {
+        const isFavEmpty = activeExplorerFilter === 'favorites';
         container.innerHTML = `
           <div class="h-full min-h-[380px] flex flex-col items-center justify-center p-6 text-center space-y-3 bg-slate-900 rounded-3xl border border-[var(--nz-border)] text-white">
             <div class="w-14 h-14 rounded-2xl bg-[var(--nz-surface)] border border-[var(--nz-border)] flex items-center justify-center text-[var(--nz-accent)]">
               <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             </div>
-            <p class="text-sm font-bold">${communitySongs.length === 0 ? (isEn ? 'No published creations yet' : 'Aucune création publiée pour le moment') : (isEn ? 'No tracks found' : 'Aucun morceau trouvé')}</p>
-            <p class="text-xs text-slate-400 max-w-xs">${communitySongs.length === 0 ? (isEn ? 'Publish your creations from "My Creations" or "Shorts" by selecting "Explore" in the menu to share with the community.' : 'Publie tes créations depuis « Mes créations » ou « Shorts » en cliquant sur « Explorer » pour les partager avec la communauté.') : (isEn ? 'Select another style or add tracks to your favorites.' : 'Sélectionne un autre style ou ajoute des morceaux en favoris.')}</p>
-            ${communitySongs.length === 0 ? `<button type="button" onclick="switchTab('songs')" class="mt-2 px-4 py-2 rounded-xl bg-[var(--nz-accent)] text-[var(--nz-on-accent)] text-xs font-bold shadow-md cursor-pointer">${isEn ? 'View My Creations' : 'Voir mes créations'}</button>` : ''}
+            <p class="text-sm font-bold">${isFavEmpty ? (isEn ? 'No favorites saved yet' : 'Aucun morceau dans tes favoris') : (communitySongs.length === 0 ? (isEn ? 'No published creations yet' : 'Aucune création publiée pour le moment') : (isEn ? 'No tracks found' : 'Aucun morceau trouvé'))}</p>
+            <p class="text-xs text-slate-400 max-w-xs">${isFavEmpty ? (isEn ? 'Click "Add to Favorites" on any track in Explore to save and replay it here.' : 'Clique manuellement sur « Ajouter à mes favoris » sur un morceau dans Explorer pour le retrouver et le réécouter ici.') : (communitySongs.length === 0 ? (isEn ? 'Publish your creations from "My Creations" or "Shorts" by selecting "Explore" in the menu to share with the community.' : 'Publie tes créations depuis « Mes créations » ou « Shorts » en cliquant sur « Explorer » pour les partager avec la communauté.') : (isEn ? 'Select another style or view all tracks.' : 'Sélectionne un autre style ou reviens sur Tous.'))}</p>
+            ${communitySongs.length === 0 ? `<button type="button" onclick="switchTab('songs')" class="mt-2 px-4 py-2 rounded-xl bg-[var(--nz-accent)] text-[var(--nz-on-accent)] text-xs font-bold shadow-md cursor-pointer">${isEn ? 'View My Creations' : 'Voir mes créations'}</button>` : (isFavEmpty ? `<button type="button" onclick="filterExplorer('all')" class="mt-2 px-4 py-2 rounded-xl bg-[var(--nz-accent)] text-[var(--nz-on-accent)] text-xs font-bold shadow-md cursor-pointer">${isEn ? 'Explore tracks' : 'Découvrir des morceaux'}</button>` : '')}
           </div>
         `;
         return;
@@ -15164,6 +15442,7 @@
 
       container.innerHTML = filtered.map((s) => {
         const isLiked = likedSet.has(s.id);
+        const isFavorited = favoriteSet.has(String(s.id));
         const coverImg = s.cover || s.albumCover || getDefaultSongCover(s.style, s.occasion);
         const cardId = `explorer-card-${s.id}`;
         const likeCount = Number(s.likes) || 0;
@@ -15173,13 +15452,11 @@
           : `${listenCount} écoute${listenCount > 1 ? 's' : ''}`;
         const mediaUrl = s.videoUrl || s.audioUrl || '';
         const isVideoPost = Boolean(s.videoUrl || (mediaUrl && /\.mp4(\?|$)/i.test(mediaUrl)));
-        const dlExt = isVideoPost ? 'mp4' : 'mp3';
-        const targetMenuId = s.originalSongId || s.id;
 
         return `
-          <div id="${cardId}" data-song-id="${escapeHtmlAttr(s.id)}" data-audio-url="${escapeHtmlAttr(mediaUrl)}" data-is-video="${isVideoPost ? '1' : '0'}" data-song-title="${encodeURIComponent(s.title || 'Création Nzembo')}" onclick="handleExplorerCardCenterTap(event, '${cardId}')" class="explorer-song-card snap-start h-full min-h-[460px] sm:min-h-[560px] relative rounded-3xl overflow-hidden flex flex-col justify-between p-4 sm:p-6 bg-slate-900 shadow-2xl border border-[var(--nz-border)] cursor-pointer select-none">
+          <div id="${cardId}" data-song-id="${escapeHtmlAttr(s.id)}" data-audio-url="${escapeHtmlAttr(mediaUrl)}" data-is-video="${isVideoPost ? '1' : '0'}" data-song-title="${encodeURIComponent(s.title || 'Création Nzembo')}" onclick="handleExplorerCardCenterTap(event, '${cardId}')" oncontextmenu="return false;" class="explorer-song-card snap-start h-full min-h-[460px] sm:min-h-[560px] relative rounded-3xl overflow-hidden flex flex-col justify-between p-4 sm:p-6 bg-slate-900 shadow-2xl border border-[var(--nz-border)] cursor-pointer select-none">
             ${isVideoPost ? `
-              <video id="feed-video-${cardId}" src="${escapeHtmlAttr(mediaUrl)}" poster="${escapeHtmlAttr(coverImg)}" playsinline loop preload="metadata" class="absolute inset-0 w-full h-full object-cover"></video>
+              <video id="feed-video-${cardId}" src="${escapeHtmlAttr(mediaUrl)}" poster="${escapeHtmlAttr(coverImg)}" playsinline loop preload="metadata" controlsList="nodownload" disablePictureInPicture oncontextmenu="return false;" class="absolute inset-0 w-full h-full object-cover"></video>
             ` : `
               <!-- Grande pochette en arrière-plan avec dégradé haute lisibilité -->
               <div class="absolute inset-0 bg-cover bg-center transition-transform duration-700 ease-out scale-105" style="background-image: url('${escapeHtmlAttr(coverImg)}');"></div>
@@ -15209,36 +15486,31 @@
             <!-- Zone centrale tactile dédiée au clic direct Play/Pause -->
             <div class="relative z-20 flex-1 flex items-center justify-center my-4" title="${isEn ? 'Tap to play or pause' : 'Toucher pour lire ou mettre en pause'}"></div>
 
-            <!-- Centre / Bas : Titre, Créateur et Lecteur (gauche) + Actions verticales (droite) -->
+            <!-- Centre / Bas : Titre, Créateur & Barre de progression uniquement + Actions sociales strictes (J'aime, Favoris manuels, Partager) -->
             <div class="relative z-20 flex items-end justify-between gap-4 mt-auto">
-              <!-- Info morceau et Play/Pause -->
-              <div class="flex-1 min-w-0 space-y-2">
+              <!-- Info morceau et Barre de progression audio/vidéo uniquement -->
+              <div class="flex-1 min-w-0 space-y-2.5">
                 <div class="space-y-0.5">
                   <h3 class="text-lg sm:text-2xl font-black text-white drop-shadow-lg truncate">${escapeHtml(s.title)}</h3>
                   <p class="text-xs text-[#F5B83D] font-semibold drop-shadow-sm truncate">${escapeHtml(s.artist || 'Nzembo Studio')}</p>
                 </div>
 
-                <!-- Bouton Play/Pause Local pour la carte -->
-                <div class="flex items-center gap-3 pt-1">
-                  <button type="button" onclick="event.stopPropagation(); toggleFeedCardPlay('${cardId}')" id="btn-play-${cardId}" class="w-12 h-12 rounded-full bg-[var(--nz-accent)] text-[var(--nz-on-accent)] flex items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition-transform cursor-pointer" aria-label="Lire ou mettre en pause">
-                    <span id="icon-play-${cardId}">${SVG_PLAY_ICON}</span>
-                  </button>
-                  <div class="flex-1 min-w-0 space-y-1" onclick="event.stopPropagation(); seekFeedProgress(event, '${cardId}')">
-                    <div class="h-1.5 bg-white/30 rounded-full overflow-hidden cursor-pointer">
-                      <div id="prog-bar-${cardId}" class="h-full bg-[var(--nz-accent)] w-0 transition-all duration-150"></div>
-                    </div>
-                    <div class="flex items-center justify-between text-[10px] font-mono text-slate-300">
-                      <span id="prog-time-${cardId}">0:00</span>
-                      <span id="dur-time-${cardId}">${s.duration || '--:--'}</span>
-                    </div>
+                <!-- Barre de progression audio/vidéo épurée -->
+                <div class="w-full space-y-1 pt-0.5" onclick="event.stopPropagation(); seekFeedProgress(event, '${cardId}')">
+                  <div class="h-1.5 bg-white/30 rounded-full overflow-hidden cursor-pointer">
+                    <div id="prog-bar-${cardId}" class="h-full bg-[var(--nz-accent)] w-0 transition-all duration-150"></div>
+                  </div>
+                  <div class="flex items-center justify-between text-[10px] font-mono text-slate-300">
+                    <span id="prog-time-${cardId}">0:00</span>
+                    <span id="dur-time-${cardId}">${s.duration || '--:--'}</span>
                   </div>
                 </div>
               </div>
 
-              <!-- Boutons verticaux sur le côté droit : J'aime, Télécharger, Menu 3 points juste après, Partager -->
+              <!-- Boutons verticaux sur le côté droit : J'aime, Ajouter à mes favoris, Partager (aucun téléchargement ni Options) -->
               <div class="flex flex-col items-center gap-2.5 pb-1 flex-shrink-0" onclick="event.stopPropagation()">
                 <!-- Bouton J'aime principal avec son compteur unique -->
-                <button type="button" onclick="toggleLikeFeedCard('${escapeHtmlAttr(s.id)}')" id="btn-like-${escapeHtmlAttr(s.id)}" class="flex flex-col items-center gap-0.5 group cursor-pointer">
+                <button type="button" onclick="toggleLikeFeedCard('${escapeHtmlAttr(s.id)}')" id="btn-like-${escapeHtmlAttr(s.id)}" class="flex flex-col items-center gap-0.5 group cursor-pointer" title="${isEn ? 'Like' : 'J\'aime'}">
                   <div class="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md border border-white/20 flex items-center justify-center text-white group-hover:scale-110 transition-transform">
                     <svg id="heart-svg-${escapeHtmlAttr(s.id)}" class="w-5 h-5 ${isLiked ? 'text-rose-500 fill-current' : 'text-white'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
@@ -15247,28 +15519,18 @@
                   <span id="like-count-${escapeHtmlAttr(s.id)}" class="text-[10px] font-bold text-white drop-shadow-sm">${likeCount}</span>
                 </button>
 
-                <!-- Bouton Télécharger -->
-                <button type="button" onclick="downloadCreationById('${escapeHtmlAttr(targetMenuId)}', '${escapeHtmlAttr(mediaUrl)}', '${dlExt}')" class="flex flex-col items-center gap-0.5 group cursor-pointer" title="${isEn ? 'Download' : 'Télécharger'}">
+                <!-- Bouton explicite Ajouter à mes favoris (ajout manuel uniquement) -->
+                <button type="button" onclick="toggleFavoriteFeedCard('${escapeHtmlAttr(s.id)}')" id="btn-fav-${escapeHtmlAttr(s.id)}" class="flex flex-col items-center gap-0.5 group cursor-pointer" title="${isFavorited ? (isEn ? 'Remove from favorites' : 'Retirer de mes favoris') : (isEn ? 'Add to favorites' : 'Ajouter à mes favoris')}">
                   <div class="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md border border-white/20 flex items-center justify-center text-white group-hover:scale-110 transition-transform">
-                    <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                    <svg id="fav-svg-${escapeHtmlAttr(s.id)}" class="w-5 h-5 ${isFavorited ? 'text-[#F5B83D] fill-current' : 'text-white'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
                     </svg>
                   </div>
-                  <span class="text-[10px] font-medium text-white drop-shadow-sm">Audio/MP4</span>
-                </button>
-
-                <!-- Bouton 3 points situé juste après l'icône de téléchargement -->
-                <button type="button" onclick="openMobileCardMenu('${escapeHtmlAttr(targetMenuId)}')" class="flex flex-col items-center gap-0.5 group cursor-pointer" title="${isEn ? 'More options' : 'Plus d\'actions'}">
-                  <div class="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md border border-white/20 flex items-center justify-center text-white group-hover:scale-110 transition-transform">
-                    <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                      <circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>
-                    </svg>
-                  </div>
-                  <span class="text-[10px] font-medium text-white drop-shadow-sm">${isEn ? 'Options' : 'Options'}</span>
+                  <span id="fav-label-${escapeHtmlAttr(s.id)}" class="text-[9px] font-semibold text-white drop-shadow-sm max-w-[68px] text-center leading-tight">${isFavorited ? (isEn ? 'Favorited' : 'En favoris') : (isEn ? 'Add to favs' : 'Ajouter à mes favoris')}</span>
                 </button>
 
                 <!-- Bouton Partager -->
-                <button type="button" onclick="shareExplorerSong('${escapeHtmlAttr(s.title)}', '${escapeHtmlAttr(mediaUrl)}')" class="flex flex-col items-center gap-0.5 group cursor-pointer" title="${isEn ? 'Share' : 'Partager'}">
+                <button type="button" onclick="shareExplorerSong('${escapeHtmlAttr(s.title)}', '${escapeHtmlAttr(s.id)}')" class="flex flex-col items-center gap-0.5 group cursor-pointer" title="${isEn ? 'Share' : 'Partager'}">
                   <div class="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md border border-white/20 flex items-center justify-center text-white group-hover:scale-110 transition-transform">
                     <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
@@ -15465,9 +15727,19 @@
         const icon = document.getElementById(`icon-play-${cardId}`);
         if (icon) icon.innerHTML = SVG_PAUSE_ICON;
         const centerOverlay = document.getElementById(`center-overlay-${cardId}`);
-        if (centerOverlay) centerOverlay.classList.add('opacity-0');
+        if (centerOverlay) {
+          centerOverlay.classList.remove('opacity-100');
+          centerOverlay.classList.add('opacity-0');
+        }
         if (isNewCardPlay) incrementExplorerSongListen(songId);
       }).catch(err => {
+        const centerOverlay = document.getElementById(`center-overlay-${cardId}`);
+        const centerIcon = document.getElementById(`center-icon-${cardId}`);
+        if (centerIcon) centerIcon.innerHTML = SVG_PLAY_ICON;
+        if (centerOverlay) {
+          centerOverlay.classList.remove('opacity-0');
+          centerOverlay.classList.add('opacity-100');
+        }
         console.warn('Autoplay restreint par le navigateur:', err);
       });
     }
@@ -15709,8 +15981,12 @@
       switchTab(targetTab, false);
       window._nzemboInitialLoad = false;
 
-      // Restaurer le brouillon du formulaire si on est sur 'create'
-      if (targetTab === 'create' && typeof restoreWizardFormDraft === 'function') {
+      // Initialisation des devises (USD par défaut) et chargement des taux de change en temps réel
+      if (typeof updateAllCurrencyDisplays === 'function') updateAllCurrencyDisplays();
+      if (typeof fetchLiveCurrencyRates === 'function') fetchLiveCurrencyRates(false);
+
+      // Restaurer le brouillon du formulaire si on est sur 'create' (sauf sélection explicite)
+      if (targetTab === 'create' && !window._userExplicitStylePick && typeof restoreWizardFormDraft === 'function') {
         restoreWizardFormDraft();
       }
 
@@ -16607,8 +16883,11 @@
       });
     }
 
-    function shareExplorerSong(title, url) {
-      openShareModal(title || 'Ma création Nzembo', 'Découvre sur Nzembo', url || window.location.href);
+    function shareExplorerSong(title, songIdOrUrl) {
+      const baseExplorerUrl = (window.location.origin && window.location.pathname && /^https?:$/i.test(window.location.protocol))
+        ? `${window.location.origin}${window.location.pathname}#explorer`
+        : 'https://app.nzembo.net/#explorer';
+      openShareModal(title || 'Ma création Nzembo', baseExplorerUrl);
     }
 
     function shareCreationSong(songId) {
@@ -17055,14 +17334,36 @@
       if (typeof likeCommunitySong === 'function') {
         likeCommunitySong(songId);
       }
-      if (activeExplorerFilter === 'favorites' && typeof renderCommunityFeed === 'function') {
-        renderCommunityFeed(true);
-      }
     }
     window.toggleLikeFeedCard = toggleLikeFeedCard;
 
     function toggleFavoriteFeedCard(songId) {
-      toggleLikeFeedCard(songId);
+      if (!songId) return;
+      const sid = String(songId);
+      const favSet = getFavoriteSongsSet();
+      const favSvg = document.getElementById(`fav-svg-${sid}`);
+      const favLbl = document.getElementById(`fav-label-${sid}`);
+      const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+
+      if (favSet.has(sid)) {
+        favSet.delete(sid);
+        if (favSvg) favSvg.setAttribute('class', 'w-5 h-5 text-white');
+        if (favLbl) favLbl.textContent = isEn ? 'Add to favs' : 'Ajouter à mes favoris';
+        triggerToast(isEn ? 'Removed from your favorites.' : 'Retiré de mes favoris.', 'info');
+      } else {
+        favSet.add(sid);
+        if (favSvg) favSvg.setAttribute('class', 'w-5 h-5 text-[#F5B83D] fill-current');
+        if (favLbl) favLbl.textContent = isEn ? 'Favorited' : 'En favoris';
+        triggerToast(isEn ? 'Added to your favorites!' : 'Ajouté à mes favoris !', 'success');
+      }
+
+      try {
+        localStorage.setItem(getFavoriteSongsStorageKey(), JSON.stringify([...favSet]));
+      } catch (e) {}
+
+      if (activeExplorerFilter === 'favorites' && typeof renderCommunityFeed === 'function') {
+        renderCommunityFeed(false);
+      }
     }
     window.toggleFavoriteFeedCard = toggleFavoriteFeedCard;
 
