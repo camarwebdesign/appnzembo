@@ -202,7 +202,6 @@ async function buildAppSeoHeadAndSsr(req, backendServer) {
   let ogImage = DEFAULT_OG_IMAGE;
   let ogImageAlt = 'Nzembo — Studio de création musicale et chansons par intelligence artificielle';
   let jsonLdGraph = buildDefaultGraph();
-  let ssrSlotHtml = '';
 
   if (sharedId) {
     const meta = await fetchSharedTrackMeta(backendServer, sharedId);
@@ -236,15 +235,6 @@ async function buildAppSeoHeadAndSsr(req, backendServer) {
       };
     }
     jsonLdGraph = [...buildDefaultGraph(), musicRecording];
-
-    ssrSlotHtml = `
-      <article id="nz-ssr-shared-summary" class="mt-4 p-4 rounded-xl border border-[var(--nz-border)] bg-[var(--nz-surface)] text-xs text-[var(--nz-muted)] space-y-1.5">
-        <h2 class="text-sm font-bold text-[var(--nz-text)]">${escapeHtml(trackName)} — ${escapeHtml(styleName)} (${escapeHtml(artistName)})</h2>
-        <p>${escapeHtml(description)}</p>
-        ${meta && meta.lyricsSnippet ? `<p class="italic">${escapeHtml(meta.lyricsSnippet)}...</p>` : ''}
-        <p class="pt-1"><a href="${APP_ORIGIN}/explorer" class="font-semibold text-[var(--nz-accent)] hover:underline">Découvrir plus de chansons sur Explorer Nzembo</a> • <a href="${LANDING_ORIGIN}/" class="font-semibold text-[var(--nz-accent)] hover:underline">Présentation Nzembo</a></p>
-      </article>
-    `;
   } else if (cleanPath === '/explorer' || cleanPath === '/decouvrir') {
     const expRows = await fetchExplorerPublicList(backendServer);
     title = cleanPath === '/decouvrir'
@@ -279,17 +269,6 @@ async function buildAppSeoHeadAndSsr(req, backendServer) {
         },
       },
     ];
-
-    if (expRows.length > 0) {
-      ssrSlotHtml = `
-        <section id="nz-ssr-explorer-index" class="mt-4 p-4 rounded-xl border border-[var(--nz-border)] bg-[var(--nz-surface)] space-y-2 text-xs">
-          <h2 class="text-sm font-bold text-[var(--nz-text)]">Sélection publique Explorer Nzembo</h2>
-          <ul class="grid sm:grid-cols-2 gap-1.5 text-[var(--nz-muted)]">
-            ${expRows.map(r => `<li><a href="/share/${escapeHtml(r.id)}" class="font-semibold text-[var(--nz-text)] hover:text-[var(--nz-accent)]">${escapeHtml(r.title || 'Création Nzembo')}</a> — ${escapeHtml(r.style || 'Musique IA')} (${escapeHtml(r.artist || 'Nzembo')})</li>`).join('')}
-          </ul>
-        </section>
-      `;
-    }
   } else if (cleanPath === '/tarifs') {
     title = 'Tarifs & Crédits Nzembo — 0,80 $ par crédit, sans abonnement';
     description = 'Consulte les tarifs Nzembo : 0,80 $ USD par crédit sans abonnement pour générer des chansons IA complètes, paroles, instrumentaux, covers, remix et clips vidéo MP4 via Mobile Money ou carte bancaire.';
@@ -331,17 +310,16 @@ async function buildAppSeoHeadAndSsr(req, backendServer) {
   <script type="application/ld+json">${safeJsonLd({ '@context': 'https://schema.org', '@graph': jsonLdGraph })}</script>
   `;
 
-  return { headHtml, ssrSlotHtml };
+  return { headHtml };
 }
 
 async function renderAppHtmlWithSeo(req, publicDir, backendServer) {
   let html = getAppHtmlTemplate(publicDir);
-  const { headHtml, ssrSlotHtml } = await buildAppSeoHeadAndSsr(req, backendServer);
+  const { headHtml } = await buildAppSeoHeadAndSsr(req, backendServer);
   html = html.replace(
     /<!-- NZEMBO_SEO_HEAD_START -->[\s\S]*?<!-- NZEMBO_SEO_HEAD_END -->/,
     `<!-- NZEMBO_SEO_HEAD_START -->${headHtml}<!-- NZEMBO_SEO_HEAD_END -->`
   );
-  html = html.replace('<!-- NZEMBO_SEO_SSR_SLOT -->', ssrSlotHtml || '');
   return html;
 }
 
