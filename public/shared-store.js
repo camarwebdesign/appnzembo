@@ -13,9 +13,13 @@
 
   function playNotificationChime(type = 'default') {
     try {
+      window.__nzemboChimeCount = (window.__nzemboChimeCount || 0) + 1;
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
-      const ctx = new AudioCtx();
+      const ctx = window.__nzChimeCtx || (window.__nzChimeCtx = new AudioCtx());
+      if (ctx.state === 'suspended' && typeof ctx.resume === 'function') {
+        ctx.resume().catch(() => {});
+      }
       const now = ctx.currentTime;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -141,6 +145,8 @@
       storeData.userAccount = JSON.parse(JSON.stringify(defaultData.userAccount));
     }
     if (!Array.isArray(storeData.messages)) storeData.messages = [];
+    // Toujours purger toute erreur/incident technique de la boîte utilisateur (réservé à l'administration)
+    storeData.messages = storeData.messages.filter((m) => m && !m.isError && String(m.category || '').toLowerCase() !== 'error');
     if (!Array.isArray(storeData.users)) storeData.users = [];
     if (!Array.isArray(storeData.transactions)) storeData.transactions = [];
     if (!Array.isArray(storeData.withdrawals)) storeData.withdrawals = [];
@@ -218,33 +224,47 @@
       return newBal;
     },
 
-    addErrorNotification: function(title, content, subject = '') {
+    addErrorNotification: function(_title, _content, _subject = '') {
+      // Les erreurs et incidents applicatifs ne doivent jamais être ajoutés dans les notifications utilisateur
+      return null;
+    },
+
+    addUserInboxNotification: function({ title, subject = '', content = '', category = 'info', categoryLabel = 'Notification', badgeColor = '', target = '', dedupeKey = '', playSound = true, chimeType = 'default' } = {}) {
       const data = loadStore();
-      const targetId = (data.userAccount && data.userAccount.id) ? data.userAccount.id : 'all';
-      const cleanContent = String(content || title || '').trim();
+      const targetId = target || (data.userAccount && data.userAccount.id) || 'all';
+      const cleanTitle = String(title || 'Notification Nzembo').trim();
+      const cleanContent = String(content || cleanTitle).trim();
       if (!cleanContent) return null;
 
-      // Éviter les doublons identiques dans les 5 dernières secondes
       const now = Date.now();
-      const recentDup = (data.messages || []).find((m) =>
-        m.isError &&
-        m.content === cleanContent &&
-        (now - (Number(m.createdAtMs) || 0)) < 5000
-      );
-      if (recentDup) return recentDup;
+      const dup = (data.messages || []).find((m) => {
+        if (!m) return false;
+        if (dedupeKey && m.dedupeKey === dedupeKey) return true;
+        return m.title === cleanTitle && m.content === cleanContent && (now - (Number(m.createdAtMs) || 0)) < 300000;
+      });
+      if (dup) return dup;
+
+      const badgeMap = {
+        payment: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+        creation: 'bg-[var(--nz-accent-soft)] text-[var(--nz-accent)]',
+        success: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+        promo: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
+        info: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+      };
 
       const msg = {
-        id: 'err_' + now + '_' + Math.random().toString(36).slice(2, 6),
-        target: targetId || 'all',
-        category: 'error',
-        categoryLabel: 'Erreur / Alerte',
-        badgeColor: 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300',
-        title: String(title || 'Problème détecté'),
-        subject: String(subject || 'Incident technique / validation'),
+        id: 'usr_n_' + now + '_' + Math.random().toString(36).slice(2, 6),
+        dedupeKey: dedupeKey || '',
+        target: targetId,
+        category: category === 'error' ? 'info' : category,
+        categoryLabel: categoryLabel || 'Notification',
+        badgeColor: badgeColor || badgeMap[category] || badgeMap.info,
+        title: cleanTitle,
+        subject: String(subject || '').trim(),
         content: cleanContent,
         date: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
         createdAtMs: now,
-        isError: true,
+        isError: false,
         readBy: [],
         likes: 0,
         loves: 0,
@@ -253,16 +273,28 @@
       data.messages.unshift(msg);
       if (data.messages.length > 80) data.messages = data.messages.slice(0, 80);
       saveStore(data);
+      if (playSound) {
+        const triggerChime = (window.NzemboStore && typeof window.NzemboStore.playChime === 'function')
+          ? window.NzemboStore.playChime
+          : playNotificationChime;
+        triggerChime(chimeType || (category === 'payment' ? 'money' : 'success'));
+      }
       return msg;
     },
 
     mergeRemoteNotifications: function(remoteList) {
       if (!Array.isArray(remoteList) || remoteList.length === 0) return loadStore().messages;
       const data = loadStore();
+      const uid = (data.userAccount && data.userAccount.id) ? String(data.userAccount.id) : 'guest';
+      const hadExisting = (data.messages || []).length > 0;
       const existingIds = new Set((data.messages || []).map((m) => m.id));
+      let addedUnread = 0;
       let added = 0;
       for (const r of remoteList) {
         if (!r || !r.id || existingIds.has(r.id)) continue;
+        if (r.is_error || r.isError || String(r.category || '').toLowerCase() === 'error') continue;
+        const readBy = Array.isArray(r.read_by) ? r.read_by : [];
+        const isUnread = !readBy.includes(uid) && !readBy.includes('current_user');
         data.messages.push({
           id: r.id,
           target: r.target || r.user_id || 'all',
@@ -274,18 +306,25 @@
           content: r.content || '',
           date: r.created_at ? new Date(r.created_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : 'Récemment',
           createdAtMs: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
-          isError: Boolean(r.is_error),
-          readBy: Array.isArray(r.read_by) ? r.read_by : [],
+          isError: false,
+          readBy,
           likes: 0,
           loves: 0,
           fires: 0
         });
         existingIds.add(r.id);
         added++;
+        if (isUnread) addedUnread++;
       }
       if (added > 0) {
         data.messages.sort((a, b) => (Number(b.createdAtMs) || 0) - (Number(a.createdAtMs) || 0));
         saveStore(data);
+        if (hadExisting && addedUnread > 0) {
+          const triggerChime = (window.NzemboStore && typeof window.NzemboStore.playChime === 'function')
+            ? window.NzemboStore.playChime
+            : playNotificationChime;
+          triggerChime('default');
+        }
       }
       return data.messages;
     },

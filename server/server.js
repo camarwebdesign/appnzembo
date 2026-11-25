@@ -191,6 +191,41 @@ function requireAdminAuth(requiredPerm = null) {
   };
 }
 
+// Journalisation automatique des incidents techniques uniquement pour le panneau d'administration
+async function logAdminIncidentToDb({ severity = 'error', source = 'backend', title = 'Incident technique', message = '', details = {}, userId = '', userEmail = '', pageUrl = '' }) {
+  try {
+    const cleanMsg = String(message || title || '').trim().slice(0, 2000);
+    if (!cleanMsg) return null;
+    await ensureDbReady();
+    // Éviter le spam de doublons identiques en moins de 15 secondes
+    const dup = await query(
+      `SELECT id FROM admin_incidents WHERE message = $1 AND source = $2 AND created_at > NOW() - INTERVAL '15 seconds' LIMIT 1`,
+      [cleanMsg, String(source || 'app').slice(0, 120)]
+    ).catch(() => ({ rows: [] }));
+    if (dup.rows && dup.rows.length > 0) return dup.rows[0].id;
+
+    const id = `inc_${Date.now()}_${crypto.randomBytes(2).toString('hex')}`;
+    await query(
+      `INSERT INTO admin_incidents (id, severity, source, title, message, details, user_id, user_email, page_url, resolved)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, FALSE)`,
+      [
+        id,
+        String(severity || 'error').slice(0, 30),
+        String(source || 'app.nzembo.net').slice(0, 120),
+        String(title || 'Incident Nzembo').slice(0, 250),
+        cleanMsg,
+        JSON.stringify(details && typeof details === 'object' ? details : {}),
+        String(userId || '').slice(0, 120),
+        String(userEmail || '').slice(0, 180),
+        String(pageUrl || '').slice(0, 500),
+      ]
+    );
+    return id;
+  } catch {
+    return null;
+  }
+}
+
 // ======================= PROXY MOTEUR AUDIO UNIVERSEL (/api/engine/*) =======================
 function registerEngineProxyRoutes(targetApp) {
   // Vérification santé moteur
@@ -275,6 +310,13 @@ function registerEngineProxyRoutes(targetApp) {
         lastPayload = { code: 502, msg: err.message };
       }
     }
+    await logAdminIncidentToDb({
+      severity: 'error',
+      source: 'suno-engine-proxy',
+      title: `Erreur moteur audio (${lastStatus})`,
+      message: (lastPayload && (lastPayload.msg || lastPayload.message || lastPayload.error)) || `HTTP ${lastStatus} sur ${cleanSub}`,
+      details: { path: cleanSub, method, status: lastStatus }
+    });
     return res.status(lastStatus).json(lastPayload);
   });
 }
@@ -933,13 +975,83 @@ app.post('/api/analytics/visit', async (req, res) => {
   }
 });
 
+// ======================= PARTAGE DIRECT PUBLIC D'UNE CHANSON (/api/share/:id) =======================
+app.get('/api/share/:id', async (req, res) => {
+  try {
+    await ensureDbReady();
+    const rawId = String(req.params.id || '').trim();
+    if (!rawId) return res.status(400).json({ success: false, error: 'Identifiant requis.' });
+    const preferExplorerOnly = req.query.src === 'explorer' || req.query.exp === '1';
+
+    let songRow = null;
+    if (!preferExplorerOnly) {
+      const sRes = await query(
+        `SELECT id, title, style, occasion, recipient, lyrics, audio_url, audio_url_2, video_url, vocal_url, instrumental_url, cover_url, album_cover, tool_category, metadata
+         FROM songs WHERE id = $1 OR task_id = $1 LIMIT 1`,
+        [rawId]
+      );
+      if (sRes.rows && sRes.rows.length > 0) songRow = sRes.rows[0];
+    }
+
+    const expRes = await query(
+      `SELECT id, original_song_id, artist, title, style, occasion, tool_category, audio_url, video_url, cover_url, likes, listens
+       FROM explorer_posts WHERE id = $1 OR original_song_id = $1 LIMIT 1`,
+      [rawId]
+    );
+    const expRow = (expRes.rows && expRes.rows.length > 0) ? expRes.rows[0] : null;
+
+    if (!songRow && !expRow) {
+      return res.status(404).json({ success: false, error: 'Création introuvable.' });
+    }
+
+    const isExplorerOnly = Boolean(preferExplorerOnly || (!songRow && expRow));
+    const item = songRow
+      ? {
+          id: songRow.id,
+          title: songRow.title || 'Chanson Nzembo',
+          style: songRow.style || 'Musique',
+          occasion: songRow.occasion || '',
+          artist: songRow.recipient ? `Pour ${songRow.recipient}` : ((expRow && expRow.artist) || 'Nzembo Studio'),
+          audioUrl: songRow.audio_url || songRow.audio_url_2 || songRow.vocal_url || songRow.instrumental_url || '',
+          videoUrl: songRow.video_url || '',
+          coverUrl: songRow.album_cover || songRow.cover_url || (expRow && expRow.cover_url) || '',
+          lyrics: songRow.lyrics || '',
+          duration: (songRow.metadata && songRow.metadata.duration) ? Number(songRow.metadata.duration) : null,
+          toolCategory: songRow.tool_category || 'generation',
+          isExplorerOnly
+        }
+      : {
+          id: expRow.id,
+          title: expRow.title || 'Création Nzembo',
+          style: expRow.style || 'Musique',
+          occasion: expRow.occasion || '',
+          artist: expRow.artist || 'Artiste Nzembo',
+          audioUrl: expRow.audio_url || '',
+          videoUrl: expRow.video_url || '',
+          coverUrl: expRow.cover_url || '',
+          lyrics: '',
+          duration: null,
+          toolCategory: expRow.tool_category || 'generation',
+          isExplorerOnly: true
+        };
+
+    return res.json({ success: true, song: item, item });
+  } catch (err) {
+    await logAdminIncidentToDb({ severity: 'error', source: 'api-share', title: 'Erreur endpoint /api/share', message: err.message });
+    return res.status(500).json({ success: false, error: 'Impossible de charger la création partagée.' });
+  }
+});
+
+// ======================= NOTIFICATIONS UTILISATEUR (COMPTE & SUCCÈS UNIQUEMENT) & INCIDENTS ADMIN =======================
 app.get('/api/notifications', async (req, res) => {
   try {
     await ensureDbReady();
     const userId = String(req.query.userId || '').trim();
     const r = await query(
       `SELECT * FROM user_notifications
-       WHERE target = 'all' OR target = $1 OR user_id = $1
+       WHERE (is_error IS NULL OR is_error = FALSE)
+         AND COALESCE(LOWER(category), '') <> 'error'
+         AND (target = 'all' OR target = $1 OR user_id = $1)
        ORDER BY created_at DESC LIMIT 80`,
       [userId || 'guest']
     );
@@ -952,17 +1064,86 @@ app.get('/api/notifications', async (req, res) => {
 app.post('/api/notifications', async (req, res) => {
   try {
     await ensureDbReady();
-    const { userId, category = 'error', categoryLabel = 'Erreur / Alerte', badgeColor, title, subject = '', content, isError = true } = req.body || {};
+    const { userId, category = 'info', categoryLabel = 'Notification', badgeColor, title, subject = '', content, isError = false } = req.body || {};
     if (!title && !content) return res.status(400).json({ success: false, error: 'title ou content requis.' });
+
+    // Séparation stricte : toute alerte ou erreur part uniquement vers l'administration, jamais chez l'utilisateur
+    if (Boolean(isError) || String(category).toLowerCase() === 'error') {
+      const incId = await logAdminIncidentToDb({
+        severity: 'error',
+        source: subject || 'app-client',
+        title: title || 'Incident client',
+        message: content || title,
+        userId: userId || '',
+      });
+      return res.json({ success: true, id: incId, routedToAdmin: true });
+    }
+
     const id = `notif_${Date.now()}_${crypto.randomBytes(2).toString('hex')}`;
     const uid = String(userId || 'guest');
-    const colBadge = badgeColor || (isError ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300' : 'bg-amber-100 text-amber-800');
+    const colBadge = badgeColor || 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300';
     await query(
       `INSERT INTO user_notifications (id, user_id, target, category, category_label, badge_color, title, subject, content, is_error)
-       VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [id, uid, category, categoryLabel, colBadge, String(title || 'Notification Nzembo').slice(0, 250), String(subject).slice(0, 250), String(content || ''), Boolean(isError)]
+       VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, FALSE)`,
+      [id, uid, category, categoryLabel, colBadge, String(title || 'Notification Nzembo').slice(0, 250), String(subject).slice(0, 250), String(content || '')]
     );
     return res.json({ success: true, id });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Capture publique des incidents applicatifs -> strictement visible dans le panneau Admin
+app.post('/api/admin/incidents', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const id = await logAdminIncidentToDb({
+      severity: b.severity || 'error',
+      source: b.source || 'app.nzembo.net',
+      title: b.title || 'Incident technique',
+      message: b.message || b.error || '',
+      details: b.details || {},
+      userId: b.userId || b.user_id || '',
+      userEmail: b.userEmail || b.user_email || '',
+      pageUrl: b.pageUrl || '',
+    });
+    return res.json({ success: true, id });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/incidents', requireAdminAuth('overview'), async (_req, res) => {
+  try {
+    await ensureDbReady();
+    const r = await query(`SELECT * FROM admin_incidents ORDER BY created_at DESC LIMIT 150`);
+    const unresolvedCount = (r.rows || []).filter(i => !i.resolved).length;
+    return res.json({ success: true, incidents: r.rows || [], unresolvedCount });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.patch('/api/admin/incidents/:id/resolve', requireAdminAuth('overview'), async (req, res) => {
+  try {
+    await ensureDbReady();
+    const id = String(req.params.id || '');
+    if (id === 'all') {
+      await query(`UPDATE admin_incidents SET resolved = TRUE WHERE resolved = FALSE`);
+    } else {
+      await query(`UPDATE admin_incidents SET resolved = TRUE WHERE id = $1`, [id]);
+    }
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/admin/incidents', requireAdminAuth('overview'), async (_req, res) => {
+  try {
+    await ensureDbReady();
+    await query(`DELETE FROM admin_incidents`);
+    return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -1139,7 +1320,7 @@ app.get('/api/admin/auth/me', requireAdminAuth(), async (req, res) => {
 app.get('/api/admin/overview', requireAdminAuth('overview'), async (req, res) => {
   try {
     await ensureDbReady();
-    const [uRes, sRes, txRes, payRes, wRes, promoRes, collabRes, visRes] = await Promise.all([
+    const [uRes, sRes, txRes, payRes, wRes, promoRes, collabRes, visRes, incRes] = await Promise.all([
       query('SELECT id, name, email, credits, role, country, referral_code, referred_by, created_at FROM users ORDER BY created_at DESC'),
       query('SELECT * FROM songs ORDER BY created_at DESC LIMIT 200'),
       query('SELECT * FROM transactions ORDER BY created_at DESC LIMIT 200'),
@@ -1148,6 +1329,7 @@ app.get('/api/admin/overview', requireAdminAuth('overview'), async (req, res) =>
       query('SELECT * FROM promo_codes ORDER BY created_at DESC'),
       query('SELECT id, supabase_user_id, email, name, role, permissions, status, invited_by, created_at FROM admin_collaborators ORDER BY created_at ASC'),
       query('SELECT * FROM visit_events ORDER BY created_at DESC LIMIT 1000'),
+      query('SELECT * FROM admin_incidents ORDER BY created_at DESC LIMIT 150').catch(() => ({ rows: [] })),
     ]);
 
     // Lire également les profils et créations existants dans Supabase
@@ -1346,6 +1528,7 @@ app.get('/api/admin/overview', requireAdminAuth('overview'), async (req, res) =>
       withdrawals: wRes.rows || [],
       promos: promoRes.rows || [],
       collaborators: collabRes.rows || [],
+      incidents: incRes.rows || [],
       traffic,
     });
   } catch (err) {

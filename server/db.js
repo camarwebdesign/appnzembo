@@ -206,6 +206,21 @@ async function initDb() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS admin_incidents (
+      id VARCHAR(120) PRIMARY KEY,
+      severity VARCHAR(30) NOT NULL DEFAULT 'error',
+      source VARCHAR(120) NOT NULL DEFAULT 'app.nzembo.net',
+      title VARCHAR(255) NOT NULL,
+      message TEXT NOT NULL,
+      details JSONB NOT NULL DEFAULT '{}'::jsonb,
+      user_id VARCHAR(120) DEFAULT '',
+      user_email VARCHAR(180) DEFAULT '',
+      page_url TEXT DEFAULT '',
+      resolved BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_admin_incidents_created ON admin_incidents (created_at DESC);
+
     CREATE TABLE IF NOT EXISTS visit_events (
       id VARCHAR(120) PRIMARY KEY,
       session_id VARCHAR(120),

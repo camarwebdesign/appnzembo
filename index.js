@@ -10,8 +10,16 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const PORT = process.env.PORT || 3001;
 const app = express();
 
-function sendAppView(_req, res) {
-  return res.sendFile(path.join(PUBLIC_DIR, 'app.html'));
+const { renderAppHtmlWithSeo, buildAppSitemapXml } = require('./server/seo');
+
+async function sendAppView(req, res) {
+  try {
+    const html = await renderAppHtmlWithSeo(req, PUBLIC_DIR, backendServer);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(html);
+  } catch (err) {
+    return res.sendFile(path.join(PUBLIC_DIR, 'app.html'));
+  }
 }
 
 // Endpoint client env.local.js (sert le fichier local en dev, ou expose la config publique depuis process.env en production)
@@ -119,8 +127,25 @@ app.get(['/public/:asset', '/app/:asset'], (req, res, next) => {
   return next();
 });
 
+app.get('/robots.txt', (_req, res) => {
+  res.type('text/plain; charset=utf-8');
+  return res.sendFile(path.join(PUBLIC_DIR, 'robots.txt'));
+});
+
+app.get(['/sitemap.xml', '/api/sitemap.xml'], async (_req, res) => {
+  try {
+    const xml = await buildAppSitemapXml(backendServer);
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300');
+    return res.send(xml);
+  } catch (err) {
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    return res.send(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://app.nzembo.net/</loc></url></urlset>`);
+  }
+});
+
 app.use(express.static(PUBLIC_DIR, { index: false }));
-app.get(['/', '/auth/callback', '/callback', '/app', '/app/*', '/invite', '/invite/*'], sendAppView);
+app.get(['/', '/explorer', '/tarifs', '/studio', '/decouvrir', '/auth/callback', '/callback', '/app', '/app/*', '/invite', '/invite/*', '/share', '/share/*'], sendAppView);
 
 app.get('*', (req, res, next) => {
   if (!req.path.startsWith('/api/') && !path.extname(req.path)) {

@@ -1930,18 +1930,42 @@
         const res = await fetch(`${getBackendApiBase()}/api/notifications?userId=${encodeURIComponent(u)}`);
         const json = await res.json().catch(() => ({}));
         if (res.ok && json.success && Array.isArray(json.notifications)) {
+          const userSafeList = json.notifications.filter(n => n && !n.is_error && String(n.category || '').toLowerCase() !== 'error');
           if (typeof window !== 'undefined' && window.NzemboStore && typeof window.NzemboStore.mergeRemoteNotifications === 'function') {
-            window.NzemboStore.mergeRemoteNotifications(json.notifications);
+            window.NzemboStore.mergeRemoteNotifications(userSafeList);
           }
-          return json.notifications;
+          return userSafeList;
         }
       } catch {}
       return [];
     },
 
-    pushNotification: async function({ title, subject = '', content, category = 'error', categoryLabel = 'Erreur / Alerte', isError = true }) {
+    reportAdminIncident: async function({ title = 'Incident technique', message = '', source = 'app.nzembo.net', severity = 'error', details = {}, pageUrl = '' } = {}) {
       try {
         const u = getCurrentUser();
+        await fetch(`${getBackendApiBase()}/api/admin/incidents`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            severity,
+            source,
+            title,
+            message: String(message || title || '').slice(0, 2000),
+            details,
+            userId: u ? u.id : '',
+            userEmail: u ? (u.email || '') : '',
+            pageUrl: pageUrl || (typeof window !== 'undefined' ? window.location.href : '')
+          })
+        }).catch(() => {});
+      } catch {}
+    },
+
+    pushNotification: async function({ title, subject = '', content, category = 'info', categoryLabel = 'Notification', isError = false }) {
+      try {
+        const u = getCurrentUser();
+        if (Boolean(isError) || String(category || '').toLowerCase() === 'error') {
+          return this.reportAdminIncident({ title: title || 'Incident applicatif', message: content || title, source: subject || 'app-client' });
+        }
         await fetch(`${getBackendApiBase()}/api/notifications`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1952,7 +1976,7 @@
             title,
             subject,
             content,
-            isError
+            isError: false
           })
         }).catch(() => {});
       } catch {}

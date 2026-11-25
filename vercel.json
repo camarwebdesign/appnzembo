@@ -39,36 +39,64 @@
       "destination": "/$1"
     },
     {
-      "source": "/auth/callback",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/callback",
-      "destination": "/index.html"
-    },
-    {
       "source": "/app",
-      "destination": "/index.html"
+      "destination": "/api/index"
     },
     {
       "source": "/app/((?!.*\\..*).*)",
-      "destination": "/index.html"
+      "destination": "/api/index"
+    },
+    {
+      "source": "/share",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/share/(.*)",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/explorer",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/tarifs",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/studio",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/decouvrir",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/index"
     },
     {
       "source": "/invite",
-      "destination": "/index.html"
+      "destination": "/api/index"
     },
     {
       "source": "/invite/(.*)",
-      "destination": "/index.html"
+      "destination": "/api/index"
+    },
+    {
+      "source": "/auth/callback",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/callback",
+      "destination": "/api/index"
     },
     {
       "source": "/",
-      "destination": "/index.html"
+      "destination": "/api/index"
     },
     {
       "source": "/((?!api/|env\\.local\\.js|.*\\..*).*)",
-      "destination": "/index.html"
+      "destination": "/api/index"
     }
   ]
 }

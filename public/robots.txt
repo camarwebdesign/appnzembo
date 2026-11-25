@@ -1,0 +1,16 @@
+User-agent: *
+Allow: /
+Allow: /explorer
+Allow: /tarifs
+Allow: /studio
+Allow: /decouvrir
+Allow: /share/
+Disallow: /api/
+Disallow: /auth/
+Disallow: /callback
+Disallow: /invite/
+Disallow: /env.local.js
+Disallow: /profile
+Disallow: /settings
+
+Sitemap: https://app.nzembo.net/sitemap.xml
